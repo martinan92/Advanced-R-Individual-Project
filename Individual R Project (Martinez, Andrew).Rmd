@@ -1,0 +1,68 @@
+---
+title: "Individual R Project (Martinez, Andrew)"
+author: "Andrew Martinez"
+date: "5/8/2019"
+output: html_document
+---
+
+#https://www.kaggle.com/harlfoxem/housesalesprediction
+
+```{r, include=FALSE}
+if(!"pacman" %in% installed.packages()) {install.packages("pacman")}
+pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dplyr","leaflet","chron","proj4","ranger", "ggplot2", "ggthemes", "tidyr", "dplyr", "xts")
+```
+
+## Helper Functions
+```{r}
+dimension = function(df){
+  kk = dim(df)[2];
+  
+  x = round(sqrt(kk),0);
+  y = ceiling(kk/x);
+  
+  return(c(x,y))
+}
+```
+
+## Data Import
+
+```{r}
+raw_train_df <- fread('Data/house_price_train.csv', stringsAsFactors = F)
+raw_test_df <- fread('Data/house_price_test.csv', stringsAsFactors = F)
+
+str(raw_train_df)
+summary(raw_train_df)
+head(raw_train_df)
+
+#Check for null values
+sum(is.na(raw_train_df))
+sum(is.na(raw_test_df))
+```
+
+## Exploratory Analysis
+
+You can also embed plots, for example:
+
+```{r}
+numeric_var <- c('price', 'bedrooms', 'sqft_living', 'sqft_lot', 'floors', 'condition', 'grade', 'sqft_above', 'sqft_basement', 'yr_built', 'yr_renovated', 'sqft_living15', 'sqft_lot15')
+
+
+# Chart and data transformations
+raw_train_df[on=numeric_var] %>%
+    # Reshape
+    gather(key = indicator, value = val) %>%
+    # Basic chart
+    ggplot(aes(x = val)) +
+    geom_bar(colour = "darkgreen", fill = "gray") +
+    facet_wrap(~indicator, nrow = 2) +
+    ## Theme and looks 
+    theme_economist() +
+    ggtitle("Histograms") +
+    theme(strip.background = element_rect(fill = "gray80", colour = "black",
+                                          size = 0.5, linetype = "solid"),
+          strip.text = element_text(face = "bold"))
+```
+
+```{r}
+
+```
