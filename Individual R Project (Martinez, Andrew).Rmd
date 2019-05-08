@@ -9,7 +9,9 @@ output: html_document
 
 ```{r, include=FALSE}
 if(!"pacman" %in% installed.packages()) {install.packages("pacman")}
-pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dplyr","leaflet","chron","proj4","ranger", "ggplot2", "ggthemes", "tidyr", "dplyr", "xts")
+pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dplyr","leaflet","chron","proj4","ranger", "ggplot2", "ggthemes", "tidyr", "dplyr", "xts", "glmnet", "xgboost")
+
+source('code/regression_metrics.R')
 ```
 
 ## Helper Functions
@@ -39,6 +41,25 @@ sum(is.na(raw_train_df))
 sum(is.na(raw_test_df))
 ```
 
+## Initial Cleaning
+```{r}
+clean_train_df <- raw_train_df
+clean_test_df <- raw_test_df
+
+clean_train_df$date <- as.Date(raw_train_df$date, "%MM/%d/%yyyy")
+clean_test_df$date <- as.Date(clean_test_df$date, "%M/%d/%YYYY")
+
+clean_train_df$year <- year(clean_train_df[,clean_train_df$date])
+clean_train_df$month <- month(clean_train_df[,clean_train_df$date])
+clean_train_df$day <- day(clean_train_df[,clean_train_df$date])
+clean_train_df$day_of_week <- day.of.week(clean_train_df[,clean_train_df$date])
+
+clean_test_df$year <- year(clean_test_df[,clean_test_df$date])
+clean_test_df$month <- month(clean_test_df[,clean_test_df$date])
+clean_test_df$day <- day(clean_test_df[,clean_test_df$date])
+clean_test_df$day_of_week <- day.of.week(clean_test_df[,clean_test_df$date])
+```
+
 ## Exploratory Analysis
 
 You can also embed plots, for example:
@@ -47,20 +68,20 @@ You can also embed plots, for example:
 numeric_var <- c('price', 'bedrooms', 'sqft_living', 'sqft_lot', 'floors', 'condition', 'grade', 'sqft_above', 'sqft_basement', 'yr_built', 'yr_renovated', 'sqft_living15', 'sqft_lot15')
 
 
-# Chart and data transformations
-raw_train_df[on=numeric_var] %>%
-    # Reshape
-    gather(key = indicator, value = val) %>%
-    # Basic chart
-    ggplot(aes(x = val)) +
-    geom_bar(colour = "darkgreen", fill = "gray") +
-    facet_wrap(~indicator, nrow = 2) +
-    ## Theme and looks 
-    theme_economist() +
-    ggtitle("Histograms") +
-    theme(strip.background = element_rect(fill = "gray80", colour = "black",
-                                          size = 0.5, linetype = "solid"),
-          strip.text = element_text(face = "bold"))
+# # Chart and data transformations
+# raw_train_df[on=numeric_var] %>%
+#     # Reshape
+#     gather(key = indicator, value = val) %>%
+#     # Basic chart
+#     ggplot(aes(x = val)) +
+#     geom_bar(colour = "darkgreen", fill = "gray") +
+#     facet_wrap(~indicator, nrow = 2) +
+#     ## Theme and looks 
+#     theme_economist() +
+#     ggtitle("Histograms") +
+#     theme(strip.background = element_rect(fill = "gray80", colour = "black",
+#                                           size = 0.5, linetype = "solid"),
+#           strip.text = element_text(face = "bold"))
 ```
 
 ```{r}
@@ -83,13 +104,111 @@ ggplot(data=raw_train_df, aes(x=sqft_lot, y=price, group=1)) +
 
 ```
 
-## Baseline Model
+## Baseline Model Comparisons
+### Linear Regression
+
+```{r}
+glmnet_cv<-cv.glmnet(x = data.matrix(raw_train_df[, !'price']), nfolds = 5, y = raw_train_df[['price']],
+                     alpha=1, family = 'gaussian', standardize = T)
+plot.cv.glmnet(glmnet_cv)
+
+glmnet_cv$lambda.min
+
+glmnet_0<-glmnet(x = data.matrix(raw_train_df[, !'price']), 
+                 y = raw_train_df[['price']],
+                 family = 'gaussian',
+                 alpha=1, lambda = glmnet_cv$lambda.min)
+
+print(glmnet_0)
+glmnet_0$beta
+
+test_glmnet<-predict(glmnet_0, newx = as.matrix(raw_test_df[, !'price']))
+test_glmnet
+
+df_pred<-raw_test_df[, .(id=1:.N,price, test_glmnet)]
+str(df_pred)
+
+ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
+  geom_point(alpha=0.65)+geom_line(alpha=0.65)+
+  ylim(0,50000)+xlab('')+ylab('$')+
+  ggtitle('Lasso Regression - Test Prediction on Housing Price')+
+  scale_colour_manual(values = c('black','red'))
+
+
+rmse_glmnet<-rmse(real=raw_test_df, predicted = test_glmnet)
+mae_glmnet<-mae(real=raw_test_df, predicted = test_glmnet)
+mape_glmnet<-mape(real=raw_test_df predicted = test_glmnet)
+mape_glmnet
+```
+
+## Ranger Random Forest
 
 ```{r}
 baseline_rf <- ranger(formula = as.formula(price~.), data=raw_train_df[,!c('id')],num.trees=400)
-baseline_lm <- lm(price~., data=raw_train_df[, !c('id')])
+print(baseline_rf)
 
-baseline_rf
-baseline_lm
+test_rf<-predict(baseline_rf, newdata = raw_test_df type='response')
+
+df_pred<-cbind(df_pred, test_rf)
+str(df_pred)
+
+ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
+  geom_point(alpha=0.65)+geom_line(alpha=0.65)+
+  ylim(0,50000)+xlab('')+ylab('$')+
+  ggtitle('Random Forest - Test Prediction on House Price')+
+  scale_colour_manual(values = c('black','red','blue'))
+
+
+rmse_rf<-rmse(real=raw_test_df, predicted = test_rf)
+mae_rf<-mae(real=raw_test_df, predicted = test_rf)
+mape_rf<-mape(real=raw_test_df predicted = test_rf)
+mape_rf
+```
+
+## XG Boost
+
+```{r}
+xgb_reg_0<-xgboost(booster='gblinear',
+                   data=as.matrix(raw_train_df[, !'price', with=F]),
+                   label=raw_train_df$price,
+                   nrounds = 100,
+                   objective='reg:linear')
+print(xgb_0)
+
+test_xgb<-predict(xgb_0, newdata = as.matrix(raw_test_df[, !'price', with=F]), type='response')
+
+df_pred<-cbind(df_pred, test_xgb)
+str(df_pred)
+
+ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
+  geom_point(alpha=0.65)+geom_line(alpha=0.65)+
+  ylim(0,50000)+xlab('')+ylab('$')+
+  ggtitle('Boosted Tree - Test Prediction on House Price')+
+  scale_colour_manual(values = c('black','red','blue','forestgreen'))
+
+
+rmse_xgb<-rmse(real=raw_test_df, predicted = test_xgb)
+mae_xgb<-mae(real=raw_test_df, predicted = test_xgb)
+mape_xgb<-mape(real=raw_test_df predicted = test_xgb)
+mape_xgb
+```
+
+## Model Comparison
+
+```{r}
+result<-data.table(method=c('glmnet','rf','xgb_reg'),
+                   rmse=sapply(df_pred[,!c('price','id')],function(x) return(rmse(real=df_pred$price, predicted=x))),
+                   mae=sapply(df_pred[,!c('price','id')],function(x) return(mae(real=df_pred$price, predicted=x))),
+                   mape=sapply(df_pred[,!c('price','id')],function(x) return(mape(real=df_pred$price, predicted=x))))
+
+result
+
+result[which.min(result$mape)]
+
+# plotting results metrics
+
+ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
 
 ```
