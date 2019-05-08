@@ -46,18 +46,21 @@ sum(is.na(raw_test_df))
 clean_train_df <- raw_train_df
 clean_test_df <- raw_test_df
 
-clean_train_df$date <- as.Date(raw_train_df$date, "%MM/%d/%yyyy")
-clean_test_df$date <- as.Date(clean_test_df$date, "%M/%d/%YYYY")
+# Train Data set
+clean_train_df$date <- as.Date(raw_train_df$date, "%m/%d/%Y")
 
 clean_train_df$year <- year(clean_train_df[,clean_train_df$date])
 clean_train_df$month <- month(clean_train_df[,clean_train_df$date])
 clean_train_df$day <- day(clean_train_df[,clean_train_df$date])
-clean_train_df$day_of_week <- day.of.week(clean_train_df[,clean_train_df$date])
+#clean_train_df$day_of_week <- day.of.week(clean_train_df[,clean_train_df$date])
+
+# Test Data Set
+clean_test_df$date <- as.Date(clean_test_df$date, "%m/%d/%Y")
 
 clean_test_df$year <- year(clean_test_df[,clean_test_df$date])
 clean_test_df$month <- month(clean_test_df[,clean_test_df$date])
 clean_test_df$day <- day(clean_test_df[,clean_test_df$date])
-clean_test_df$day_of_week <- day.of.week(clean_test_df[,clean_test_df$date])
+#clean_test_df$day_of_week <- day.of.week(clean_test_df[,clean_test_df$date])
 ```
 
 ## Exploratory Analysis
