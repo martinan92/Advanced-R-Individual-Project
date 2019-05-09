@@ -136,7 +136,7 @@ glmnet_0$beta
 test_glmnet<-predict(glmnet_0, newx = data.matrix(split_clean_train_df$test[,!c('id','price')]))
 test_glmnet
 
-df_pred<-clean_test_df[, .(id=1:.N, test_glmnet)]
+df_pred<-split_clean_train_df$test[, .(id=1:.N, price, test_glmnet)]
 str(df_pred)
 
 ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
