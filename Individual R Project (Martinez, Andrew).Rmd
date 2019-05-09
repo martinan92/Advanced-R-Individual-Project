@@ -12,6 +12,7 @@ if(!"pacman" %in% installed.packages()) {install.packages("pacman")}
 pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dplyr","leaflet","chron","proj4","ranger", "ggplot2", "ggthemes", "tidyr", "dplyr", "xts", "glmnet", "xgboost")
 
 source('code/regression_metrics.R')
+source('code/f_partition.R')
 ```
 
 ## Helper Functions
@@ -61,6 +62,10 @@ clean_test_df$year <- year(clean_test_df[,clean_test_df$date])
 clean_test_df$month <- month(clean_test_df[,clean_test_df$date])
 clean_test_df$day <- day(clean_test_df[,clean_test_df$date])
 #clean_test_df$day_of_week <- day.of.week(clean_test_df[,clean_test_df$date])
+
+clean_train_df$date = NULL
+clean_test_df$date = NULL
+
 ```
 
 ## Exploratory Analysis
@@ -108,24 +113,27 @@ ggplot(data=raw_train_df, aes(x=sqft_lot, y=price, group=1)) +
 ```
 
 ## Baseline Model Comparisons
-### Linear Regression
+### Lasso Linear Regression
 
 ```{r}
-glmnet_cv<-cv.glmnet(x = data.matrix(clean_train_df[, !'price']), nfolds = 5, y = clean_train_df[['price']],
+split_clean_train_df <- f_partition(clean_train_df, test_proportion = 0.2, seed = 123456)
+
+glmnet_cv<-cv.glmnet(x = data.matrix(split_clean_train_df$train[, !c('id','price')]), nfolds = 5, 
+                     y = split_clean_train_df$train[['price']],
                      alpha=1, family = 'gaussian', standardize = T)
 plot.cv.glmnet(glmnet_cv)
 
 glmnet_cv$lambda.min
 
-glmnet_0<-glmnet(x = data.matrix(clean_train_df[, !'price']), 
-                 y = clean_train_df[['price']],
+glmnet_0<-glmnet(x = data.matrix(split_clean_train_df$train[, !c('id','price')]), 
+                 y = split_clean_train_df$train[['price']],
                  family = 'gaussian',
                  alpha=1, lambda = glmnet_cv$lambda.min)
 
 print(glmnet_0)
 glmnet_0$beta
 
-test_glmnet<-predict(glmnet_0, newx = data.matrix(clean_test_df))
+test_glmnet<-predict(glmnet_0, newx = data.matrix(split_clean_train_df$test[,!c('id','price')]))
 test_glmnet
 
 df_pred<-clean_test_df[, .(id=1:.N, test_glmnet)]
@@ -138,19 +146,19 @@ ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
   scale_colour_manual(values = c('black','red'))
 
 
-rmse_glmnet<-rmse(real=clean_test_df, predicted = test_glmnet)
-mae_glmnet<-mae(real=clean_test_df, predicted = test_glmnet)
-mape_glmnet<-mape(real=clean_test_df, predicted = test_glmnet)
+rmse_glmnet<-rmse(real=split_clean_train_df$test$price, predicted = test_glmnet)
+mae_glmnet<-mae(real=split_clean_train_df$test$price, predicted = test_glmnet)
+mape_glmnet<-mape(real=split_clean_train_df$test$price, predicted = test_glmnet)
 mape_glmnet
 ```
 
 ## Ranger Random Forest
 
 ```{r}
-baseline_rf <- ranger(formula = as.formula(price~.), data=clean_train_df[,!c('id')],num.trees=400)
+baseline_rf <- ranger(formula = as.formula(price~.), data=split_clean_train_df$train[,!c('id')],num.trees=400)
 print(baseline_rf)
 
-test_rf<-predict(baseline_rf, data = clean_test_df, type='response')
+test_rf<-predict(baseline_rf, data = split_clean_train_df$test, type='response')$predictions
 
 df_pred<-cbind(df_pred, test_rf)
 str(df_pred)
@@ -162,9 +170,9 @@ ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
   scale_colour_manual(values = c('black','red','blue'))
 
 
-rmse_rf<-rmse(real=clean_test_df, predicted = test_rf)
-mae_rf<-mae(real=clean_test_df, predicted = test_rf)
-mape_rf<-mape(real=clean_test_df, predicted = test_rf)
+rmse_rf<-rmse(real=split_clean_train_df$test$price, predicted = test_rf)
+mae_rf<-mae(real=split_clean_train_df$test$price, predicted = test_rf)
+mape_rf<-mape(real=split_clean_train_df$test$price, predicted = test_rf)
 mape_rf
 ```
 
@@ -172,13 +180,14 @@ mape_rf
 
 ```{r}
 xgb_reg_0<-xgboost(booster='gblinear',
-                   data=as.matrix(clean_train_df[, !'price', with=F]),
-                   label=raw_train_df$price,
+                   data=data.matrix(split_clean_train_df$train[, !c('id','price'), with=F]),
+                   label=split_clean_train_df$train$price,
                    nrounds = 100,
                    objective='reg:linear')
-print(xgb_0)
+print(xgb_reg_0)
 
-test_xgb<-predict(xgb_0, newdata = as.matrix(clean_test_df[, !'price', with=F]), type='response')
+test_xgb<-predict(xgb_reg_0, newdata = data.matrix(split_clean_train_df$test[, !c('id','price'), with=F]), 
+                  type='response')
 
 df_pred<-cbind(df_pred, test_xgb)
 str(df_pred)
@@ -190,9 +199,9 @@ ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
   scale_colour_manual(values = c('black','red','blue','forestgreen'))
 
 
-rmse_xgb<-rmse(real=clean_test_df, predicted = test_xgb)
-mae_xgb<-mae(real=clean_test_df, predicted = test_xgb)
-mape_xgb<-mape(real=clean_test_df, predicted = test_xgb)
+rmse_xgb<-rmse(real=split_clean_train_df$test$price, predicted = test_xgb)
+mae_xgb<-mae(real=split_clean_train_df$test$price, predicted = test_xgb)
+mape_xgb<-mape(real=split_clean_train_df$test$price, predicted = test_xgb)
 mape_xgb
 ```
 
