@@ -109,6 +109,24 @@ ggplot(data=raw_train_df, aes(x=sqft_lot, y=price, group=1)) +
 
 ```
 
+### Geographic Analysis
+```{r}
+# geo_df <-data.table(clean_test_df)[,.(total_average_value=mean(value, na.rm = T)), by = c('parameter','station')]
+# 
+# map <- leaflet(data.frame(geolocation_data)) %>%
+#   addTiles() %>%  # Add default OpenStreetMap map tiles
+#   addCircleMarkers(lng=~lon, lat=~lat,
+#                    popup= ~paste(station,compound, sep=' '),
+#                    radius = ~total_average_value,
+#                    color= ~colorsmap,
+#                    group= unique(geolocation_data$compound)) %>% 
+#   addLegend("bottomright", colors = colorsmap, labels = unique(geolocation_data$compound))
+# 
+# madrid
+
+```
+
+
 ## Baseline Model Comparisons
 ### Lasso Linear Regression
 
