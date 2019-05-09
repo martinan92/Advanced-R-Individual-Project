@@ -125,10 +125,10 @@ glmnet_0<-glmnet(x = data.matrix(clean_train_df[, !'price']),
 print(glmnet_0)
 glmnet_0$beta
 
-test_glmnet<-predict(glmnet_0, newx = as.matrix(clean_test_df[, !'price']))
+test_glmnet<-predict(glmnet_0, newx = data.matrix(clean_test_df))
 test_glmnet
 
-df_pred<-clean_test_df[, .(id=1:.N,price, test_glmnet)]
+df_pred<-clean_test_df[, .(id=1:.N, test_glmnet)]
 str(df_pred)
 
 ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
