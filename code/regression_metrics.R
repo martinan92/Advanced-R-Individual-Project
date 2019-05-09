@@ -9,3 +9,7 @@ mape<-function(real,predicted){
 rmse<-function(real,predicted){
   return(sqrt(mean((real-predicted)^2)))
 }
+
+custom_rsq<-function(real, predicted){ 
+  return(cor(real, predicted)^2)
+}

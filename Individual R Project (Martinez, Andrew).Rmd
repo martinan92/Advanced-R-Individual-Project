@@ -139,17 +139,20 @@ test_glmnet
 df_pred<-split_clean_train_df$test[, .(id=1:.N, price, test_glmnet)]
 str(df_pred)
 
-ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
-  geom_point(alpha=0.65)+geom_line(alpha=0.65)+
-  ylim(0,50000)+xlab('')+ylab('$')+
-  ggtitle('Lasso Regression - Test Prediction on Housing Price')+
-  scale_colour_manual(values = c('black','red'))
+# ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
+#   geom_point(alpha=0.65)+geom_line(alpha=0.65)+
+#   ylim(0,50000)+xlab('')+ylab('$')+
+#   ggtitle('Lasso Regression - Test Prediction on Housing Price')+
+#   scale_colour_manual(values = c('black','red'))
 
 
 rmse_glmnet<-rmse(real=split_clean_train_df$test$price, predicted = test_glmnet)
 mae_glmnet<-mae(real=split_clean_train_df$test$price, predicted = test_glmnet)
 mape_glmnet<-mape(real=split_clean_train_df$test$price, predicted = test_glmnet)
 mape_glmnet
+
+rsq_glment<-custom_rsq(real=split_clean_train_df$test$price, predicted = test_glmnet)
+rsq_glment
 ```
 
 ## Ranger Random Forest
@@ -163,17 +166,20 @@ test_rf<-predict(baseline_rf, data = split_clean_train_df$test, type='response')
 df_pred<-cbind(df_pred, test_rf)
 str(df_pred)
 
-ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
-  geom_point(alpha=0.65)+geom_line(alpha=0.65)+
-  ylim(0,50000)+xlab('')+ylab('$')+
-  ggtitle('Random Forest - Test Prediction on House Price')+
-  scale_colour_manual(values = c('black','red','blue'))
+# ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
+#   geom_point(alpha=0.65)+geom_line(alpha=0.65)+
+#   ylim(0,50000)+xlab('')+ylab('$')+
+#   ggtitle('Random Forest - Test Prediction on House Price')+
+#   scale_colour_manual(values = c('black','red','blue'))
 
 
 rmse_rf<-rmse(real=split_clean_train_df$test$price, predicted = test_rf)
 mae_rf<-mae(real=split_clean_train_df$test$price, predicted = test_rf)
 mape_rf<-mape(real=split_clean_train_df$test$price, predicted = test_rf)
 mape_rf
+
+rsq_rf<-custom_rsq(real=split_clean_train_df$test$price, predicted = test_rf)
+rsq_rf
 ```
 
 ## XG Boost
@@ -192,17 +198,20 @@ test_xgb<-predict(xgb_reg_0, newdata = data.matrix(split_clean_train_df$test[, !
 df_pred<-cbind(df_pred, test_xgb)
 str(df_pred)
 
-ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
-  geom_point(alpha=0.65)+geom_line(alpha=0.65)+
-  ylim(0,50000)+xlab('')+ylab('$')+
-  ggtitle('Boosted Tree - Test Prediction on House Price')+
-  scale_colour_manual(values = c('black','red','blue','forestgreen'))
+# ggplot(melt(df_pred, id.vars = 'id'), aes(x=id,y=value, colour=variable))+
+#   geom_point(alpha=0.65)+geom_line(alpha=0.65)+
+#   ylim(0,50000)+xlab('')+ylab('$')+
+#   ggtitle('Boosted Tree - Test Prediction on House Price')+
+#   scale_colour_manual(values = c('black','red','blue','forestgreen'))
 
 
 rmse_xgb<-rmse(real=split_clean_train_df$test$price, predicted = test_xgb)
 mae_xgb<-mae(real=split_clean_train_df$test$price, predicted = test_xgb)
 mape_xgb<-mape(real=split_clean_train_df$test$price, predicted = test_xgb)
 mape_xgb
+
+rsq_xgb<-custom_rsq(real=split_clean_train_df$test$price, predicted = test_xgb)
+rsq_xgb
 ```
 
 ## Model Comparison
@@ -222,5 +231,11 @@ result[which.min(result$mape)]
 ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
+
+```
+
+## Feature Engineering
+
+```{r}
 
 ```
