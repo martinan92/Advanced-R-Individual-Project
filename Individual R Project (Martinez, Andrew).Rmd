@@ -13,6 +13,18 @@ pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dp
 
 source('code/regression_metrics.R')
 source('code/f_partition.R')
+
+@ARTICLE{tuneRanger,
+  author = {Probst, Philipp and Wright, Marvin and Boulesteix, Anne-Laure}, 
+  title = {Hyperparameters and Tuning Strategies for Random Forest},
+  journal = {ArXiv preprint arXiv:1804.03515},
+  archivePrefix = "arXiv",
+  eprint = {1804.03515},
+  primaryClass = "stat.ML",
+  keywords = {Statistics - Machine Learning, Computer Science - Learning},
+  year = 2018,
+  url = {https://arxiv.org/abs/1804.03515}
+}
 ```
 
 ## Helper Functions
@@ -417,8 +429,7 @@ task = makeRegrTask(data = split_clean_train_df$train[,!c('id')], target = "pric
 estimateTimeTuneRanger(task)
 
 # Tuning
-res = tuneRanger(task, measure = list(multiclass.brier), num.trees = 1000, 
-  num.threads = 2, iters = 70, save.file.path = NULL)
+res = tuneRanger(task, num.trees = 1000, num.threads = 2, iters = 70, save.file.path = NULL)
   
 # Mean of best 5 % of the results
 res
@@ -427,6 +438,27 @@ res
 res$model
 
 # Prediction
-predict(res$model, newdata = split_clean_train_df$test[,!c('id')])
+final <- predict(res$model, newdata = split_clean_train_df$test[,!c('id')])
+df_pipeline_pred<-cbind(df_pipeline_pred, final)
+
+
+result<-data.table(method=c('baseline','fe1','fe2','fe3','fe4','final'),
+                   rmse=sapply(fe_output_4[[3]][,!c('price','id')],
+                               function(x) return(rmse(real=fe_output_4[[3]]$price, predicted=x))),
+                   mae=sapply(fe_output_4[[3]][,!c('price','id')],
+                              function(x) return(mae(real=fe_output_4[[3]]$price, predicted=x))),
+                   mape=sapply(fe_output_4[[3]][,!c('price','id')],
+                               function(x) return(mape(real=fe_output_4[[3]]$price, predicted=x))),
+                   rsq=sapply(fe_output_4[[3]][,!c('price','id')],
+                               function(x) return(custom_rsq(real=fe_output_4[[3]]$price, predicted=x))))
+ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
+
+result[which.min(result$rmse)]
+result[which.min(result$mae)]
+result[which.min(result$mape)]
+result[which.max(result$rsq)]
 
 ```
