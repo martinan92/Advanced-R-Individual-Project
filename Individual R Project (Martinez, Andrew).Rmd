@@ -9,7 +9,7 @@ output: html_document
 
 ```{r, include=FALSE}
 if(!"pacman" %in% installed.packages()) {install.packages("pacman")}
-pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dplyr","leaflet","chron","proj4","ranger", "ggplot2", "ggthemes", "tidyr", "dplyr", "xts", "glmnet", "xgboost")
+pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dplyr","leaflet","chron","proj4","ranger", "ggplot2", "ggthemes", "tidyr", "dplyr", "xts", "glmnet", "xgboost", "tuneRanger", "mlr")
 
 source('code/regression_metrics.R')
 source('code/f_partition.R')
@@ -203,7 +203,7 @@ rsq_glment
 ## Ranger Random Forest
 
 ```{r}
-baseline_rf <- ranger(formula = as.formula(price~.), data=split_clean_train_df$train[,!c('id')],num.trees=400)
+baseline_rf <- ranger(formula = as.formula(price~.), data=split_clean_train_df$train[,!c('id')])
 print(baseline_rf)
 
 test_rf<-predict(baseline_rf, data = split_clean_train_df$test, type='response')$predictions
@@ -284,13 +284,13 @@ colnames(df_pipeline_pred) <-c('id','price','baseline')
 
 split_and_train <- function(df, seed = 123456){
   split_fe_train_df <- f_partition(df, test_proportion = 0.2, seed = seed)
-  fe_rf <- ranger(formula = as.formula(price~.), data=split_fe_train_df$train[,!c('id')],num.trees=400)
+  fe_rf <- ranger(formula = as.formula(price~.), data=split_fe_train_df$train[,!c('id')])
   print(fe_rf)
   
   fe<-predict(fe_rf, data = split_fe_train_df$test, type='response')$predictions
   df_pipeline_pred<-cbind(df_pipeline_pred, fe)
   
-  return(list(split_fe_train_df, fe, df_pipeline_pred))
+  return(list(split_fe_train_df, fe, df_pipeline_pred, fe_rf))
 }
 
 # 1. Weekday/Weekend
@@ -390,5 +390,43 @@ ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
-                                            
+
+result[which.min(result$rmse)]
+result[which.min(result$mae)]
+result[which.min(result$mape)]
+result[which.max(result$rsq)]
+
+```
+
+
+## Hyperparameter Tuning
+
+```{r}
+test_rf_tuned <- csrf(
+  formula = as.formula(price~.),
+  training_data = split_clean_train_df$train[,!c('id')],
+  test_data = split_clean_train_df$test[,!c('id')],
+  params1 = list(importance = 'impurity'),
+  params2 = list(num.trees = 50)
+)
+
+############################# TESTING ############################# 
+task = makeRegrTask(data = split_clean_train_df$train[,!c('id')], target = "price")
+ 
+# Estimate runtime
+estimateTimeTuneRanger(task)
+
+# Tuning
+res = tuneRanger(task, measure = list(multiclass.brier), num.trees = 1000, 
+  num.threads = 2, iters = 70, save.file.path = NULL)
+  
+# Mean of best 5 % of the results
+res
+
+# Model with the new tuned hyperparameters
+res$model
+
+# Prediction
+predict(res$model, newdata = split_clean_train_df$test[,!c('id')])
+
 ```
