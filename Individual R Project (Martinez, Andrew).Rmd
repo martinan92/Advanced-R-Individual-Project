@@ -154,6 +154,7 @@ for (var in outlier_var){
   bivariate_outlier(clean_test_df, var)
 }
 ```
+
 ## Baseline Model Comparisons
 ### Lasso Linear Regression
 
@@ -271,7 +272,6 @@ result
 result[which.min(result$mape)]
 
 # plotting results metrics
-
 ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
@@ -281,84 +281,105 @@ ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
 ## Feature Engineering
 
 ```{r}
-fe_train_df <- clean_train_df
-fe_test_df <- clean_test_df
-
 df_pipeline_pred<-split_clean_train_df$test[, .(id=1:.N, price, test_rf)]
 colnames(df_pipeline_pred) <-c('id','price','baseline')
 
+split_and_train <- function(df, seed = 123456){
+  split_fe_train_df <- f_partition(df, test_proportion = 0.2, seed = seed)
+  fe_rf <- ranger(formula = as.formula(price~.), data=split_fe_train_df$train[,!c('id')],num.trees=400)
+  print(fe_rf)
+  
+  fe<-predict(fe_rf, data = split_fe_train_df$test, type='response')$predictions
+  df_pipeline_pred<-cbind(df_pipeline_pred, fe)
+  
+  return(list(split_fe_train_df, fe, df_pipeline_pred))
+}
+
 # 1. Weekday/Weekend
-fe_train_df$weekend <-as.logical(is.weekend(clean_train_df$date))
-fe_test_df$weekend <-as.logical(is.weekend(clean_test_df$date))
+fe_train_df1 <- clean_train_df
+fe_test_df1 <- clean_test_df
 
-split_fe_train_df <- f_partition(fe_train_df, test_proportion = 0.2, seed = 123456)
-split_fe_train_df$train$date = NULL
-split_fe_train_df$test$date = NULL
+fe_train_df1$weekend <-as.logical(is.weekend(clean_train_df$date))
+fe_test_df1$weekend <-as.logical(is.weekend(clean_test_df$date))
+fe_train_df1$date = NULL
 
-fe_rf1 <- ranger(formula = as.formula(price~.), data=split_fe_train_df$train[,!c('id')],num.trees=400)
-print(fe_rf1)
+fe_output_1 <- split_and_train(fe_train_df1)
 
-fe1<-predict(fe_rf1, data = split_fe_train_df$test, type='response')$predictions
-df_pipeline_pred<-cbind(df_pipeline_pred, fe1)
-
-rmse_rf1<-rmse(real=split_fe_train_df$test$price, predicted = fe1)
-mae_rf1<-mae(real=split_fe_train_df$test$price, predicted = fe1)
-mape_rf1<-mape(real=split_fe_train_df$test$price, predicted = fe1)
-mape_rf1
+rmse_rf1<-rmse(real=fe_output_1[[1]]$test$price, predicted = fe_output_1[[2]])
+mae_rf1<-mae(real=fe_output_1[[1]]$test$price, predicted = fe_output_1[[2]])
+mape_rf1<-mape(real=fe_output_1[[1]]$test$price, predicted = fe_output_1[[2]])
 
 result<-data.table(method=c('baseline','fe1'),
-                   rmse=sapply(df_pipeline_pred[,!c('price','id')],
-                               function(x) return(rmse(real=df_pipeline_pred$price, predicted=x))),
-                   mae=sapply(df_pipeline_pred[,!c('price','id')],
-                              function(x) return(mae(real=df_pipeline_pred$price, predicted=x))),
-                   mape=sapply(df_pipeline_pred[,!c('price','id')],
-                               function(x) return(mape(real=df_pipeline_pred$price, predicted=x))))
-
+                   rmse=sapply(fe_output_1[[3]][,!c('price','id')],
+                               function(x) return(rmse(real=fe_output_1[[3]]$price, predicted=x))),
+                   mae=sapply(fe_output_1[[3]][,!c('price','id')],
+                              function(x) return(mae(real=fe_output_1[[3]]$price, predicted=x))),
+                   mape=sapply(fe_output_1[[3]][,!c('price','id')],
+                               function(x) return(mape(real=fe_output_1[[3]]$price, predicted=x))))
 ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
 
-rsq_fe1<-custom_rsq(real=split_fe_train_df$test$price, predicted = fe1)
+rsq_fe1<-custom_rsq(real=fe_output_1[[1]]$test$price, predicted = fe_output_1[[2]])
 rsq_fe1
 
 # 2. Holiday
-fe_train_df$holiday <-as.logical(is.holiday(clean_train_df$date))
-fe_test_df$holiday <-as.logical(is.holiday(clean_test_df$date))
+fe_train_df2 <- clean_train_df
+fe_test_df2 <- clean_test_df
 
-split_fe_train_df <- f_partition(fe_train_df, test_proportion = 0.2, seed = 123456)
-split_fe_train_df$train$date = NULL
-split_fe_train_df$test$date = NULL
+fe_train_df2$holiday <-as.logical(is.holiday(clean_train_df$date))
+fe_test_df2$holiday <-as.logical(is.holiday(clean_test_df$date))
+fe_train_df2$date = NULL
 
-fe_rf2 <- ranger(formula = as.formula(price~.), data=split_fe_train_df$train[,!c('id')],num.trees=400)
-print(fe_rf1)
+fe_output_2 <- split_and_train(fe_train_df2)
 
-fe2<-predict(fe_rf2, data = split_fe_train_df$test, type='response')$predictions
-df_pipeline_pred<-cbind(df_pipeline_pred, fe2)
-
-rmse_rf2<-rmse(real=split_fe_train_df$test$price, predicted = fe1)
-mae_rf2<-mae(real=split_fe_train_df$test$price, predicted = fe1)
-mape_rf2<-mape(real=split_fe_train_df$test$price, predicted = fe1)
-mape_rf2
+rmse_rf2<-rmse(real=fe_output_2[[1]]$test$price, predicted = fe_output_2[[2]])
+mae_rf2<-mae(real=fe_output_2[[1]]$test$price, predicted = fe_output_2[[2]])
+mape_rf2<-mape(real=fe_output_2[[1]]$test$price, predicted = fe_output_2[[2]])
 
 result<-data.table(method=c('baseline','fe1','fe2'),
-                   rmse=sapply(df_pipeline_pred[,!c('price','id')],
-                               function(x) return(rmse(real=df_pipeline_pred$price, predicted=x))),
-                   mae=sapply(df_pipeline_pred[,!c('price','id')],
-                              function(x) return(mae(real=df_pipeline_pred$price, predicted=x))),
-                   mape=sapply(df_pipeline_pred[,!c('price','id')],
-                               function(x) return(mape(real=df_pipeline_pred$price, predicted=x))))
-
+                   rmse=sapply(fe_output_2[[3]][,!c('price','id')],
+                               function(x) return(rmse(real=fe_output_2[[3]]$price, predicted=x))),
+                   mae=sapply(fe_output_2[[3]][,!c('price','id')],
+                              function(x) return(mae(real=fe_output_2[[3]]$price, predicted=x))),
+                   mape=sapply(fe_output_2[[3]][,!c('price','id')],
+                               function(x) return(mape(real=fe_output_2[[3]]$price, predicted=x))))
 ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
 
-rsq_fe2<-custom_rsq(real=split_fe_train_df$test$price, predicted = fe2)
+rsq_fe2<-custom_rsq(real=fe_output_2[[1]]$test$price, predicted = fe_output_2[[2]])
 rsq_fe2
 
-# 3.
-                                            
 fe_test_df$date = NULL
 
+# 3. Renovation Flag
+fe_train_df3 <- clean_train_df
+fe_test_df3 <- clean_test_df
 
+fe_train_df3$renovated <- ifelse(((fe_train_df3$sqft_living != fe_train_df3$sqft_living15) | 
+                                     (fe_train_df3$sqft_lot != fe_train_df3$sqft_lot15)), T, F)
+fe_test_df3$rennovated <- ifelse(((fe_test_df3$sqft_living != fe_test_df3$sqft_living15) | 
+                                     (fe_test_df3$sqft_lot != fe_test_df3$sqft_lot15)), T, F)
 
+fe_output_3 <- split_and_train(fe_train_df3)
+
+rmse_rf2<-rmse(real=fe_output_3[[1]]$test$price, predicted = fe_output_3[[2]])
+mae_rf2<-mae(real=fe_output_3[[1]]$test$price, predicted = fe_output_3[[2]])
+mape_rf2<-mape(real=fe_output_3[[1]]$test$price, predicted = fe_output_3[[2]])
+
+result<-data.table(method=c('baseline','fe1','fe2','fe3'),
+                   rmse=sapply(fe_output_3[[3]][,!c('price','id')],
+                               function(x) return(rmse(real=fe_output_3[[3]]$price, predicted=x))),
+                   mae=sapply(fe_output_3[[3]][,!c('price','id')],
+                              function(x) return(mae(real=fe_output_3[[3]]$price, predicted=x))),
+                   mape=sapply(fe_output_3[[3]][,!c('price','id')],
+                               function(x) return(mape(real=fe_output_3[[3]]$price, predicted=x))))
+ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
+
+rsq_fe3<-custom_rsq(real=fe_output_3[[1]]$test$price, predicted = fe_output_3[[2]])
+rsq_fe3
+                                            
 ```
