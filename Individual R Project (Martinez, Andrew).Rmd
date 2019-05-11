@@ -123,6 +123,19 @@ ggplot(data=raw_train_df, aes(x=sqft_lot, y=price, group=1)) +
 #   addLegend("bottomright", colors = colorsmap, labels = unique(geolocation_data$compound))
 # 
 # madrid
+clean_test_df
+```
+
+### Outlier Analysis
+```{r}
+
+univariate_outlier = function(var){
+  outlier_values <- boxplot.stats(var)$out
+  boxplot(var, main= colnames(var), boxwex=0.5)
+  print(paste("Outliers: ", paste(length(unique(outlier_values)))))
+}
+
+lapply(clean_test_df[,c('bedrooms', 'bathrooms', 'sqft_living', 'sqft_lot', 'floors', 'sqft_above', 'sqft_basement', 'yr_built', 'sqft_living15', 'sqft_lot15')], univariate_outlier)
 
 ```
 
