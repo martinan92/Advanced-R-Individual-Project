@@ -127,19 +127,33 @@ clean_test_df
 ```
 
 ### Outlier Analysis
+#### Univariate Analysis
 ```{r}
-
-univariate_outlier = function(var){
-  outlier_values <- boxplot.stats(var)$out
-  boxplot(var, main= colnames(var), boxwex=0.5)
+univariate_outlier = function(df, input_var){
+  outlier_values <- boxplot.stats(df[[input_var]])$out
+  boxplot(df[[input_var]], main= var, boxwex=0.5)
   print(paste("Outliers: ", paste(length(unique(outlier_values)))))
 }
 
-lapply(clean_test_df[,c('bedrooms', 'bathrooms', 'sqft_living', 'sqft_lot', 'floors', 'sqft_above', 'sqft_basement', 'yr_built', 'sqft_living15', 'sqft_lot15')], univariate_outlier)
+outlier_var <- c('bedrooms', 'bathrooms', 'sqft_living', 'sqft_lot', 'floors', 'sqft_above', 'sqft_basement', 'yr_built', 'sqft_living15', 'sqft_lot15')
+
+for (var in outlier_var){
+  univariate_outlier(clean_test_df, var)
+}
 
 ```
 
+#### Bivariate Analysis
+```{r}
+bivariate_outlier = function(df, input_var){
+  boxplot(df[[input_var]] ~ df$month, main=paste0("Monthly Analysis of ", var))
+  boxplot(df[[input_var]] ~ df$day_of_week, main=paste0("Daily Analysis of ", var))  
+}
 
+for (var in outlier_var){
+  bivariate_outlier(clean_test_df, var)
+}
+```
 ## Baseline Model Comparisons
 ### Lasso Linear Regression
 
