@@ -14,29 +14,17 @@ pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dp
 source('code/regression_metrics.R')
 source('code/f_partition.R')
 
-@ARTICLE{tuneRanger,
-  author = {Probst, Philipp and Wright, Marvin and Boulesteix, Anne-Laure}, 
-  title = {Hyperparameters and Tuning Strategies for Random Forest},
-  journal = {ArXiv preprint arXiv:1804.03515},
-  archivePrefix = "arXiv",
-  eprint = {1804.03515},
-  primaryClass = "stat.ML",
-  keywords = {Statistics - Machine Learning, Computer Science - Learning},
-  year = 2018,
-  url = {https://arxiv.org/abs/1804.03515}
-}
-```
-
-## Helper Functions
-```{r}
-dimension = function(df){
-  kk = dim(df)[2];
-  
-  x = round(sqrt(kk),0);
-  y = ceiling(kk/x);
-  
-  return(c(x,y))
-}
+# @ARTICLE{tuneRanger,
+#   author = {Probst, Philipp and Wright, Marvin and Boulesteix, Anne-Laure}, 
+#   title = {Hyperparameters and Tuning Strategies for Random Forest},
+#   journal = {ArXiv preprint arXiv:1804.03515},
+#   archivePrefix = "arXiv",
+#   eprint = {1804.03515},
+#   primaryClass = "stat.ML",
+#   keywords = {Statistics - Machine Learning, Computer Science - Learning},
+#   year = 2018,
+#   url = {https://arxiv.org/abs/1804.03515}
+# }
 ```
 
 ## Data Import
@@ -229,7 +217,6 @@ str(df_pred)
 #   ggtitle('Random Forest - Test Prediction on House Price')+
 #   scale_colour_manual(values = c('black','red','blue'))
 
-
 rmse_rf<-rmse(real=split_clean_train_df$test$price, predicted = test_rf)
 mae_rf<-mae(real=split_clean_train_df$test$price, predicted = test_rf)
 mape_rf<-mape(real=split_clean_train_df$test$price, predicted = test_rf)
@@ -260,7 +247,6 @@ str(df_pred)
 #   ylim(0,50000)+xlab('')+ylab('$')+
 #   ggtitle('Boosted Tree - Test Prediction on House Price')+
 #   scale_colour_manual(values = c('black','red','blue','forestgreen'))
-
 
 rmse_xgb<-rmse(real=split_clean_train_df$test$price, predicted = test_xgb)
 mae_xgb<-mae(real=split_clean_train_df$test$price, predicted = test_xgb)
@@ -353,7 +339,7 @@ ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
 
-fe_test_df$date = NULL
+clean_test_df$date = NULL
 
 # 3. Renovation Flag
 fe_train_df3 <- clean_train_df
@@ -414,13 +400,13 @@ result[which.max(result$rsq)]
 ## Hyperparameter Tuning
 
 ```{r}
-test_rf_tuned <- csrf(
-  formula = as.formula(price~.),
-  training_data = split_clean_train_df$train[,!c('id')],
-  test_data = split_clean_train_df$test[,!c('id')],
-  params1 = list(importance = 'impurity'),
-  params2 = list(num.trees = 50)
-)
+# test_rf_tuned <- csrf(
+#   formula = as.formula(price~.),
+#   training_data = split_clean_train_df$train[,!c('id')],
+#   test_data = split_clean_train_df$test[,!c('id')],
+#   params1 = list(importance = 'impurity'),
+#   params2 = list(num.trees = 50)
+# )
 
 ############################# TESTING ############################# 
 task = makeRegrTask(data = split_clean_train_df$train[,!c('id')], target = "price")
@@ -460,5 +446,25 @@ result[which.min(result$rmse)]
 result[which.min(result$mae)]
 result[which.min(result$mape)]
 result[which.max(result$rsq)]
+
+```
+
+## Retrain Model On Entire Data Set and Predict on Test Set
+
+```{r}
+clean_train_df$date = NULL
+final_rf <- ranger(formula = as.formula(price~.), data=clean_train_df[,!c('id')])
+print(final_rf)
+
+final_test_rf<-predict(final_rf, data = clean_test_df, type='response')$predictions
+prediction<-clean_test_df[, .(id=id,final_test_rf)]
+head(prediction)
+```
+
+## CSV Output
+
+```{r}
+colnames(prediction) <- c('id', 'target')
+write.csv(prediction, file = "output.csv")
 
 ```
