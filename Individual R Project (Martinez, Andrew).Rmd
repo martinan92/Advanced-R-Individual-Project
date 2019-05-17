@@ -43,6 +43,7 @@ sum(is.na(raw_test_df))
 ```
 
 ## Initial Cleaning
+
 ```{r}
 clean_train_df <- raw_train_df
 clean_test_df <- raw_test_df
@@ -66,8 +67,6 @@ clean_test_df$day_of_week <- as.POSIXlt(as.Date(clean_test_df$date, "%m/%d/%Y"))
 ```
 
 ## Exploratory Analysis
-
-You can also embed plots, for example:
 
 ```{r}
 numeric_var <- c('price', 'bedrooms', 'sqft_living', 'sqft_lot', 'floors', 'condition', 'grade', 'sqft_above', 'sqft_basement', 'yr_built', 'yr_renovated', 'sqft_living15', 'sqft_lot15')
@@ -110,6 +109,7 @@ ggplot(data=raw_train_df, aes(x=sqft_lot, y=price, group=1)) +
 ```
 
 ### Geographic Analysis
+
 ```{r}
 # geo_df <-data.table(clean_test_df)[,.(total_average_value=mean(value, na.rm = T)), by = c('parameter','station')]
 # 
@@ -128,6 +128,7 @@ clean_test_df
 
 ### Outlier Analysis
 #### Univariate Analysis
+
 ```{r}
 univariate_outlier = function(df, input_var){
   outlier_values <- boxplot.stats(df[[input_var]])$out
@@ -144,6 +145,7 @@ for (var in outlier_var){
 ```
 
 #### Bivariate Analysis
+
 ```{r}
 bivariate_outlier = function(df, input_var){
   boxplot(df[[input_var]] ~ df$month, main=paste0("Monthly Analysis of ", var))
@@ -190,7 +192,6 @@ str(df_pred)
 #   ggtitle('Lasso Regression - Test Prediction on Housing Price')+
 #   scale_colour_manual(values = c('black','red'))
 
-
 rmse_glmnet<-rmse(real=split_clean_train_df$test$price, predicted = test_glmnet)
 mae_glmnet<-mae(real=split_clean_train_df$test$price, predicted = test_glmnet)
 mape_glmnet<-mape(real=split_clean_train_df$test$price, predicted = test_glmnet)
@@ -198,6 +199,7 @@ mape_glmnet
 
 rsq_glment<-custom_rsq(real=split_clean_train_df$test$price, predicted = test_glmnet)
 rsq_glment
+
 ```
 
 ## Ranger Random Forest
@@ -292,6 +294,9 @@ split_and_train <- function(df, seed = 123456){
 }
 
 # 1. Weekday/Weekend
+####################################################################################################################
+####################################################################################################################
+####################################################################################################################
 fe_train_df1 <- clean_train_df
 fe_test_df1 <- clean_test_df
 
@@ -342,6 +347,9 @@ ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
 clean_test_df$date = NULL
 
 # 3. Renovation Flag
+####################################################################################################################
+####################################################################################################################
+####################################################################################################################
 fe_train_df3 <- clean_train_df
 fe_test_df3 <- clean_test_df
 
@@ -367,6 +375,9 @@ ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
 ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
 
 # 4. Missing Renovation Year
+####################################################################################################################
+####################################################################################################################
+####################################################################################################################
 fe_train_df4 <- fe_train_df3
 fe_test_df4 <- fe_test_df3
 
@@ -408,7 +419,9 @@ result[which.max(result$rsq)]
 #   params2 = list(num.trees = 50)
 # )
 
-############################# TESTING ############################# 
+##################################################### TESTING ###################################################### 
+####################################################################################################################
+####################################################################################################################
 task = makeRegrTask(data = split_clean_train_df$train[,!c('id')], target = "price")
  
 # Estimate runtime
