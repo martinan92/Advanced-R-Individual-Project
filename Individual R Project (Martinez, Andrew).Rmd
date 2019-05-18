@@ -9,7 +9,7 @@ output: html_document
 
 ```{r, include=FALSE}
 if(!"pacman" %in% installed.packages()) {install.packages("pacman")}
-pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dplyr","leaflet","chron","proj4","ranger", "ggplot2", "ggthemes", "tidyr", "dplyr", "xts", "glmnet", "xgboost", "tuneRanger", "mlr")
+pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dplyr","leaflet","chron","proj4","ranger", "ggplot2", "ggthemes", "tidyr", "dplyr", "xts", "glmnet", "xgboost", "tuneRanger", "mlr", "Hmisc")
 
 source('code/regression_metrics.R')
 source('code/f_partition.R')
@@ -72,7 +72,7 @@ numeric_var <- c('price', 'bedrooms', 'sqft_living', 'sqft_lot', 'floors', 'cond
 
 
 # Chart and data transformations
-raw_train_df[on=numeric_var] %>%
+clean_train_df[on=numeric_var] %>%
     # Reshape
     gather(key = indicator, value = val) %>%
     # Basic chart
@@ -109,12 +109,28 @@ ggplot(data=clean_train_df, aes(x=sqft_lot, y=price, group=1)) +
 ### Geographic Analysis
 
 ```{r}
+#Take first 1000 values
 df.1000 <- clean_train_df[1:1000,]
 
+#Bin into quartiles for data visualization
+df.1000$bin <- factor(Hmisc::cut2(df.1000$price, g = 4), labels = c(1:4))
+
+colorsmap <- colors()[c(490,24,100,657)]
 map <- leaflet(data.frame(df.1000)) %>%
   addTiles() %>%  # Add default OpenStreetMap map tiles
   addCircleMarkers(lng=~long, lat=~lat,
-                   popup= ~paste(bedrooms, bathrooms, sqft_living,sqft_lot, floors, condition, sep=' '))
+                   popup= paste0("Number of Bedrooms: ", df.1000$bedrooms, sep="\n",
+                                 "Number of Bathrooms: ", df.1000$bathrooms, sep="\n",
+                                 "Living Room Size: " , df.1000$sqft_living, sep="\n",
+                                 "Lot Size: ", df.1000$sqft_lot, sep="\n",
+                                 "Number of Floors: ", df.1000$floors, sep="\n",
+                                 "Current Condition: ", df.1000$condition),
+                   color= ~colorsmap,
+                   group= unique(df.1000$bin)) #%>% 
+# This seems to be no longer supported
+  # addLegend(position = 'bottomright', colors = colorsmap, labels = unique(df.1000$bin))
+
+#addLegend(map, position = 'bottomright', colors = colorsmap, labels = unique(df.1000$bin))
 
 map
 ```
