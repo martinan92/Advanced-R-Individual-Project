@@ -13,6 +13,7 @@ pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dp
 
 source('code/regression_metrics.R')
 source('code/f_partition.R')
+source('code/graph_helpers.R')
 
 # @ARTICLE{tuneRanger,
 #   author = {Probst, Philipp and Wright, Marvin and Boulesteix, Anne-Laure}, 
@@ -77,70 +78,13 @@ stats_hist <- c('bedrooms', 'floors','condition', 'grade')
 #Randomly Sample 1000 values
 df.1000 <- clean_train_df[sample(nrow(clean_train_df), 1000),]
 
-#Chart and data transformations
-df.1000[,..sqft_hist] %>%
-    # Reshape
-    gather(key = indicator, value = val) %>%
-    # Basic chart
-    ggplot(aes(x = val)) +
-    geom_bar(colour = "darkgreen", fill = "gray") +
-    facet_wrap(~indicator, nrow = 2) +
-    ## Theme and looks
-    theme_economist() +
-    ggtitle("Histograms") +
-    theme(strip.background = element_rect(fill = "gray80", colour = "black",
-                                          size = 0.5, linetype = "solid"),
-                                          strip.text = element_text(face = "bold"))
+multiple_hist(df.1000, sqft_hist)
+multiple_hist(df.1000, yr_hist)
+multiple_hist(df.1000, stats_hist)
 
-#Chart and data transformations
-df.1000[,..yr_hist] %>%
-    # Reshape
-    gather(key = indicator, value = val) %>%
-    # Basic chart
-    ggplot(aes(x = val)) +
-    geom_bar(colour = "darkgreen", fill = "gray") +
-    facet_wrap(~indicator, nrow = 2) +
-    ## Theme and looks
-    theme_economist() +
-    ggtitle("Histograms") +
-    theme(strip.background = element_rect(fill = "gray80", colour = "black",
-                                          size = 0.5, linetype = "solid"),
-                                          strip.text = element_text(face = "bold"))
+single_hist(df.1000$price)
+single_hist(df.1000$sqft_basement)
 
-#Chart and data transformations
-df.1000[,..stats_hist] %>%
-    # Reshape
-    gather(key = indicator, value = val) %>%
-    # Basic chart
-    ggplot(aes(x = val)) +
-    geom_bar(colour = "darkgreen", fill = "gray") +
-    facet_wrap(~indicator, nrow = 2) +
-    ## Theme and looks
-    theme_economist() +
-    ggtitle("Histograms") +
-    theme(strip.background = element_rect(fill = "gray80", colour = "black",
-                                          size = 0.5, linetype = "solid"),
-                                          strip.text = element_text(face = "bold"))
-
-# Basic chart
-qplot(df.1000$price, geom="histogram") +
-  geom_bar(colour = "darkgreen", fill = "gray") +
-  ## Theme and looks
-  theme_economist() +
-  ggtitle("Histograms") +
-  theme(strip.background = element_rect(fill = "gray80", colour = "black",
-                                        size = 0.5, linetype = "solid"),
-                                        strip.text = element_text(face = "bold"))
-
-# Basic chart
-qplot(df.1000$sqft_basement, geom="histogram") +
-  geom_bar(colour = "darkgreen", fill = "gray") +
-  ## Theme and looks
-  theme_economist() +
-  ggtitle("Histograms") +
-  theme(strip.background = element_rect(fill = "gray80", colour = "black",
-                                        size = 0.5, linetype = "solid"),
-                                        strip.text = element_text(face = "bold"))
 ```
 
 ```{r}
@@ -192,12 +136,6 @@ map
 #### Univariate Analysis
 
 ```{r}
-univariate_outlier = function(df, input_var){
-  outlier_values <- boxplot.stats(df[[input_var]])$out
-  boxplot(df[[input_var]], main= var, boxwex=0.5)
-  print(paste("Outliers: ", paste(length(unique(outlier_values)))))
-}
-
 outlier_var <- c('bedrooms', 'bathrooms', 'sqft_living', 'sqft_lot', 'floors', 'sqft_above', 'sqft_basement', 'yr_built', 'sqft_living15', 'sqft_lot15')
 
 for (var in outlier_var){
@@ -208,11 +146,6 @@ for (var in outlier_var){
 #### Bivariate Analysis
 
 ```{r}
-bivariate_outlier = function(df, input_var){
-  boxplot(df[[input_var]] ~ df$month, main=paste0("Monthly Analysis of ", var))
-  boxplot(df[[input_var]] ~ df$day_of_week, main=paste0("Daily Analysis of ", var))  
-}
-
 for (var in outlier_var){
   bivariate_outlier(clean_test_df, var)
 }
