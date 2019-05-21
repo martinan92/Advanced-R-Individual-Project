@@ -1,0 +1,462 @@
+---
+title: "Individual R Project (MartinezAndrew)"
+author: "Andrew Martinez"
+date: "5/8/2019"
+output: html_document
+---
+
+This analysis utilizes the data found in a Kaggle competition where competitors seek to predict housing prices in King County, WA, USA (https://bit.ly/2lRv48E). THe dataset provides fields including the number of bedrooms, number of bathrooms, number of floors, square footage of the living room, square footage of the overall lot, among others. The timeframe this dataset covers are the years 2014 through 2015. Therefore, this analysis will utilize a number of machine learning models and techniques in order to achieve the best possible models (in this instance measured using MAPE, MAE, MSE, and R-Squared).
+
+```{r, include=FALSE}
+if(!"pacman" %in% installed.packages()) {install.packages("pacman")}
+pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dplyr","leaflet","chron","proj4","ranger", "ggplot2", "ggthemes", "tidyr", "dplyr", "xts", "glmnet", "xgboost", "tuneRanger", "mlr", "Hmisc")
+
+source('code/regression_metrics.R')
+source('code/f_partition.R')
+source('code/graph_helpers.R')
+
+# Source for tuneRanger library
+# @ARTICLE{tuneRanger,
+#   author = {Probst, Philipp and Wright, Marvin and Boulesteix, Anne-Laure}, 
+#   title = {Hyperparameters and Tuning Strategies for Random Forest},
+#   journal = {ArXiv preprint arXiv:1804.03515},
+#   archivePrefix = "arXiv",
+#   eprint = {1804.03515},
+#   primaryClass = "stat.ML",
+#   keywords = {Statistics - Machine Learning, Computer Science - Learning},
+#   year = 2018,
+#   url = {https://arxiv.org/abs/1804.03515}
+# }
+```
+
+## Data Import
+
+```{r}
+raw_train_df <- fread('Data/house_price_train.csv', stringsAsFactors = F)
+raw_test_df <- fread('Data/house_price_test.csv', stringsAsFactors = F)
+
+str(raw_train_df)
+summary(raw_train_df)
+head(raw_train_df)
+
+#Check for null values
+sum(is.na(raw_train_df))
+sum(is.na(raw_test_df))
+```
+
+## Initial Cleaning
+
+As time series modeling will not be utilized in this analysis, the day, month, and year of each purchase will be individually parsed out rather than using the datetime field.
+
+```{r}
+clean_train_df <- raw_train_df
+clean_test_df <- raw_test_df
+
+# Train Data set
+clean_train_df$date <- as.Date(raw_train_df$date, "%m/%d/%Y")
+
+clean_train_df$year <- year(clean_train_df[,clean_train_df$date])
+clean_train_df$month <- month(clean_train_df[,clean_train_df$date])
+clean_train_df$day <- day(clean_train_df[,clean_train_df$date])
+clean_train_df$day_of_week <- as.POSIXlt(as.Date(clean_train_df$date, "%m/%d/%Y"))$wday
+
+# Test Data Set
+clean_test_df$date <- as.Date(clean_test_df$date, "%m/%d/%Y")
+
+clean_test_df$year <- year(clean_test_df[,clean_test_df$date])
+clean_test_df$month <- month(clean_test_df[,clean_test_df$date])
+clean_test_df$day <- day(clean_test_df[,clean_test_df$date])
+clean_test_df$day_of_week <- as.POSIXlt(as.Date(clean_test_df$date, "%m/%d/%Y"))$wday
+```
+
+## Exploratory Analysis
+
+```{r}
+set.seed(12345)
+
+sqft_hist <- c('sqft_living', 'sqft_lot', 'sqft_above', 'sqft_living15', 'sqft_lot15')
+yr_hist <- c('yr_built', 'yr_renovated')
+stats_hist <- c('bedrooms', 'floors','condition', 'grade')
+
+#Randomly Sample 1000 values
+df.1000 <- clean_train_df[sample(nrow(clean_train_df), 1000),]
+
+multiple_hist(df.1000, sqft_hist)
+multiple_hist(df.1000, yr_hist)
+multiple_hist(df.1000, stats_hist)
+
+single_hist(df.1000$price)
+single_hist(df.1000$sqft_basement)
+
+```
+
+```{r}
+
+ggplot(data=clean_train_df, aes(x=bathrooms, y=price, group=1)) +
+  geom_line(linetype = "dashed")+
+  geom_point()
+
+ggplot(data=clean_train_df, aes(x=bedrooms, y=price, group=1)) +
+  geom_line(linetype = "dashed")+
+  geom_point()
+
+ggplot(data=clean_train_df, aes(x=sqft_living, y=price, group=1)) +
+  geom_line(linetype = "dashed")+
+  geom_point()
+
+ggplot(data=clean_train_df, aes(x=sqft_lot, y=price, group=1)) +
+  geom_line(linetype = "dashed")+
+  geom_point()
+```
+
+### Geographic Analysis
+
+```{r}
+#Bin into quartiles for data visualization
+df.1000$bin <- factor(Hmisc::cut2(df.1000$price, g = 4), labels = c(1:4))
+
+colorsmap <- colors()[c(490,24,100,657)]
+map <- leaflet(data.frame(df.1000)) %>%
+  addTiles() %>%  # Add default OpenStreetMap map tiles
+  addCircleMarkers(lng=~long, lat=~lat,
+                   popup= paste0("Number of Bedrooms: ", df.1000$bedrooms, sep="\n",
+                                 "Number of Bathrooms: ", df.1000$bathrooms, sep="\n",
+                                 "Living Room Size: " , df.1000$sqft_living, sep="\n",
+                                 "Lot Size: ", df.1000$sqft_lot, sep="\n",
+                                 "Number of Floors: ", df.1000$floors, sep="\n",
+                                 "Current Condition: ", df.1000$condition),
+                   color= ~colorsmap,
+                   group= unique(df.1000$bin)) #%>% 
+# This seems to be no longer supported
+  # addLegend(position = 'bottomright', colors = colorsmap, labels = unique(df.1000$bin))
+
+#addLegend(map, position = 'bottomright', colors = colorsmap, labels = unique(df.1000$bin))
+
+map
+```
+
+### Outlier Analysis
+#### Univariate Analysis
+
+```{r}
+outlier_var <- c('bedrooms', 'bathrooms', 'sqft_living', 'sqft_lot', 'floors', 'sqft_above', 'sqft_basement', 'yr_built', 'sqft_living15', 'sqft_lot15')
+
+for (var in outlier_var){
+  univariate_outlier(clean_test_df, var)
+}
+```
+
+#### Bivariate Analysis
+
+```{r}
+for (var in outlier_var){
+  bivariate_outlier(clean_test_df, var)
+}
+```
+
+## Baseline Model Comparisons
+### Lasso Linear Regression
+
+```{r}
+split_clean_train_df <- f_partition(clean_train_df, test_proportion = 0.2, seed = 123456)
+split_clean_train_df$train$date = NULL
+split_clean_train_df$test$date = NULL
+
+glmnet_cv<-cv.glmnet(x = data.matrix(split_clean_train_df$train[, !c('id','price')]), nfolds = 5, 
+                     y = split_clean_train_df$train[['price']],
+                     alpha=1, family = 'gaussian', standardize = T)
+plot.cv.glmnet(glmnet_cv)
+
+glmnet_cv$lambda.min
+
+glmnet_0<-glmnet(x = data.matrix(split_clean_train_df$train[, !c('id','price')]), 
+                 y = split_clean_train_df$train[['price']],
+                 family = 'gaussian',
+                 alpha=1, lambda = glmnet_cv$lambda.min)
+
+print(glmnet_0)
+glmnet_0$beta
+
+test_glmnet<-predict(glmnet_0, newx = data.matrix(split_clean_train_df$test[,!c('id','price')]))
+
+df_pred<-split_clean_train_df$test[, .(id=1:.N, price, test_glmnet)]
+str(df_pred)
+
+rmse_glmnet<-rmse(real=split_clean_train_df$test$price, predicted = test_glmnet)
+mae_glmnet<-mae(real=split_clean_train_df$test$price, predicted = test_glmnet)
+mape_glmnet<-mape(real=split_clean_train_df$test$price, predicted = test_glmnet)
+mape_glmnet
+
+rsq_glment<-custom_rsq(real=split_clean_train_df$test$price, predicted = test_glmnet)
+rsq_glment
+```
+
+## Ranger Random Forest
+
+```{r}
+baseline_rf <- ranger(formula = as.formula(price~.), data=split_clean_train_df$train[,!c('id')])
+print(baseline_rf)
+
+test_rf<-predict(baseline_rf, data = split_clean_train_df$test, type='response')$predictions
+
+df_pred<-cbind(df_pred, test_rf)
+str(df_pred)
+
+rmse_rf<-rmse(real=split_clean_train_df$test$price, predicted = test_rf)
+mae_rf<-mae(real=split_clean_train_df$test$price, predicted = test_rf)
+mape_rf<-mape(real=split_clean_train_df$test$price, predicted = test_rf)
+mape_rf
+
+rsq_rf<-custom_rsq(real=split_clean_train_df$test$price, predicted = test_rf)
+rsq_rf
+```
+
+## XG Boost
+
+```{r}
+xgb_reg_0<-xgboost(booster='gblinear',
+                   data=data.matrix(split_clean_train_df$train[, !c('id','price'), with=F]),
+                   label=split_clean_train_df$train$price,
+                   nrounds = 100,
+                   objective='reg:linear')
+print(xgb_reg_0)
+
+test_xgb<-predict(xgb_reg_0, newdata = data.matrix(split_clean_train_df$test[, !c('id','price'), with=F]), 
+                  type='response')
+
+df_pred<-cbind(df_pred, test_xgb)
+str(df_pred)
+
+rmse_xgb<-rmse(real=split_clean_train_df$test$price, predicted = test_xgb)
+mae_xgb<-mae(real=split_clean_train_df$test$price, predicted = test_xgb)
+mape_xgb<-mape(real=split_clean_train_df$test$price, predicted = test_xgb)
+mape_xgb
+
+rsq_xgb<-custom_rsq(real=split_clean_train_df$test$price, predicted = test_xgb)
+rsq_xgb
+```
+
+## Model Comparison
+
+```{r}
+result<-data.table(method=c('glmnet','rf','xgb_reg'),
+                   rmse=sapply(df_pred[,!c('price','id')],function(x) return(rmse(real=df_pred$price, predicted=x))),
+                   mae=sapply(df_pred[,!c('price','id')],function(x) return(mae(real=df_pred$price, predicted=x))),
+                   mape=sapply(df_pred[,!c('price','id')],function(x) return(mape(real=df_pred$price, predicted=x))),
+                   rsq=sapply(df_pred[,!c('price','id')],function(x) return(custom_rsq(real=df_pred$price, predicted=x))))
+
+# plotting results metrics
+ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
+```
+
+## Feature Engineering
+
+```{r}
+df_pipeline_pred<-split_clean_train_df$test[, .(id=1:.N, price, test_rf)]
+colnames(df_pipeline_pred) <-c('id','price','baseline')
+
+split_and_train <- function(df, seed = 123456){
+  split_fe_train_df <- f_partition(df, test_proportion = 0.2, seed = seed)
+  fe_rf <- ranger(formula = as.formula(price~.), data=split_fe_train_df$train[,!c('id')])
+  print(fe_rf)
+  
+  fe<-predict(fe_rf, data = split_fe_train_df$test, type='response')$predictions
+  df_pipeline_pred<-cbind(df_pipeline_pred, fe)
+  
+  return(list(split_fe_train_df, fe, df_pipeline_pred, fe_rf))
+}
+
+# 1. Weekday/Weekend
+####################################################################################################################
+####################################################################################################################
+####################################################################################################################
+fe_train_df1 <- clean_train_df
+fe_test_df1 <- clean_test_df
+
+fe_train_df1$weekend <-as.logical(is.weekend(clean_train_df$date))
+fe_test_df1$weekend <-as.logical(is.weekend(clean_test_df$date))
+fe_train_df1$date = NULL
+
+fe_output_1 <- split_and_train(fe_train_df1)
+
+result<-data.table(method=c('baseline','fe1'),
+                   rmse=sapply(fe_output_1[[3]][,!c('price','id')],
+                               function(x) return(rmse(real=fe_output_1[[3]]$price, predicted=x))),
+                   mae=sapply(fe_output_1[[3]][,!c('price','id')],
+                              function(x) return(mae(real=fe_output_1[[3]]$price, predicted=x))),
+                   mape=sapply(fe_output_1[[3]][,!c('price','id')],
+                               function(x) return(mape(real=fe_output_1[[3]]$price, predicted=x))),
+                   rsq=sapply(fe_output_1[[3]][,!c('price','id')],
+                               function(x) return(custom_rsq(real=fe_output_1[[3]]$price, predicted=x))))
+ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
+
+# 2. Holiday
+fe_train_df2 <- clean_train_df
+fe_test_df2 <- clean_test_df
+
+fe_train_df2$holiday <-as.logical(is.holiday(clean_train_df$date))
+fe_test_df2$holiday <-as.logical(is.holiday(clean_test_df$date))
+fe_train_df2$date = NULL
+
+fe_output_2 <- split_and_train(fe_train_df2)
+
+result<-data.table(method=c('baseline','fe1','fe2'),
+                   rmse=sapply(fe_output_2[[3]][,!c('price','id')],
+                               function(x) return(rmse(real=fe_output_2[[3]]$price, predicted=x))),
+                   mae=sapply(fe_output_2[[3]][,!c('price','id')],
+                              function(x) return(mae(real=fe_output_2[[3]]$price, predicted=x))),
+                   mape=sapply(fe_output_2[[3]][,!c('price','id')],
+                               function(x) return(mape(real=fe_output_2[[3]]$price, predicted=x))),
+                   rsq=sapply(fe_output_2[[3]][,!c('price','id')],
+                               function(x) return(custom_rsq(real=fe_output_2[[3]]$price, predicted=x))))
+ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
+
+clean_test_df$date = NULL
+
+# 3. Renovation Flag
+####################################################################################################################
+####################################################################################################################
+####################################################################################################################
+fe_train_df3 <- clean_train_df
+fe_test_df3 <- clean_test_df
+
+fe_train_df3$renovated <- ifelse(((fe_train_df3$sqft_living != fe_train_df3$sqft_living15) | 
+                                     (fe_train_df3$sqft_lot != fe_train_df3$sqft_lot15)), T, F)
+fe_test_df3$rennovated <- ifelse(((fe_test_df3$sqft_living != fe_test_df3$sqft_living15) | 
+                                     (fe_test_df3$sqft_lot != fe_test_df3$sqft_lot15)), T, F)
+
+fe_output_3 <- split_and_train(fe_train_df3)
+
+result<-data.table(method=c('baseline','fe1','fe2','fe3'),
+                   rmse=sapply(fe_output_3[[3]][,!c('price','id')],
+                               function(x) return(rmse(real=fe_output_3[[3]]$price, predicted=x))),
+                   mae=sapply(fe_output_3[[3]][,!c('price','id')],
+                              function(x) return(mae(real=fe_output_3[[3]]$price, predicted=x))),
+                   mape=sapply(fe_output_3[[3]][,!c('price','id')],
+                               function(x) return(mape(real=fe_output_3[[3]]$price, predicted=x))),
+                   rsq=sapply(fe_output_3[[3]][,!c('price','id')],
+                               function(x) return(custom_rsq(real=fe_output_3[[3]]$price, predicted=x))))
+ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
+
+# 4. Missing Renovation Year
+####################################################################################################################
+####################################################################################################################
+####################################################################################################################
+fe_train_df4 <- fe_train_df3
+fe_test_df4 <- fe_test_df3
+
+fe_train_df4$missing_ren_year <- ifelse(((fe_train_df4$yr_renovated == 0) & (fe_train_df4$renovated == T)), T, F)
+fe_test_df4$missing_ren_year <- ifelse(((fe_test_df4$yr_renovated == 0) & (fe_test_df4$renovated == T)), T, F)
+
+fe_output_4 <- split_and_train(fe_train_df4)
+
+result<-data.table(method=c('baseline','fe1','fe2','fe3','fe4'),
+                   rmse=sapply(fe_output_4[[3]][,!c('price','id')],
+                               function(x) return(rmse(real=fe_output_4[[3]]$price, predicted=x))),
+                   mae=sapply(fe_output_4[[3]][,!c('price','id')],
+                              function(x) return(mae(real=fe_output_4[[3]]$price, predicted=x))),
+                   mape=sapply(fe_output_4[[3]][,!c('price','id')],
+                               function(x) return(mape(real=fe_output_4[[3]]$price, predicted=x))),
+                   rsq=sapply(fe_output_4[[3]][,!c('price','id')],
+                               function(x) return(custom_rsq(real=fe_output_4[[3]]$price, predicted=x))))
+ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
+
+result[which.min(result$rmse)]
+result[which.min(result$mae)]
+result[which.min(result$mape)]
+result[which.max(result$rsq)]
+```
+
+
+## Hyperparameter Tuning
+
+```{r}
+# test_rf_tuned <- csrf(
+#   formula = as.formula(price~.),
+#   training_data = split_clean_train_df$train[,!c('id')],
+#   test_data = split_clean_train_df$test[,!c('id')],
+#   params1 = list(importance = 'impurity'),
+#   params2 = list(num.trees = 50)
+# )
+
+##################################################### TESTING ###################################################### 
+####################################################################################################################
+####################################################################################################################
+final_train_df <- fe_output_1[[1]]
+final_test_df <- fe_test_df1
+
+#Need to convert to integers as task doesn't support categoricals
+final_train_df$train$weekend <- ifelse((final_train_df$train$weekend), 1, 0)
+final_train_df$test$weekend <- ifelse((final_train_df$test$weekend), 1, 0)
+
+task = makeRegrTask(data = final_train_df$train[,!c('id')], target = "price")
+ 
+# Estimate runtime
+estimateTimeTuneRanger(task)
+
+# Tuning
+res = tuneRanger(task, num.trees = 1000, num.threads = 2, iters = 70, save.file.path = NULL)
+  
+# Mean of best 5 % of the results
+res
+
+# Model with the new tuned hyperparameters
+res$model
+
+# Prediction
+final <- predict(res$model, newdata = final_train_df$test[,!c('id')])
+df_pipeline_pred<-cbind(df_pipeline_pred, final)
+
+result<-data.table(method=c('baseline','fe1','fe2','fe3','fe4','final'),
+                   rmse=sapply(df_pipeline_pred[,!c('price','id')],
+                               function(x) return(rmse(real=df_pipeline_pred$price, predicted=x))),
+                   mae=sapply(df_pipeline_pred[,!c('price','id')],
+                              function(x) return(mae(real=df_pipeline_pred$price, predicted=x))),
+                   mape=sapply(df_pipeline_pred[,!c('price','id')],
+                               function(x) return(mape(real=df_pipeline_pred$price, predicted=x))),
+                   rsq=sapply(df_pipeline_pred[,!c('price','id')],
+                               function(x) return(custom_rsq(real=df_pipeline_pred$price, predicted=x))))
+ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
+
+result[which.min(result$rmse)]
+result[which.min(result$mae)]
+result[which.min(result$mape)]
+result[which.max(result$rsq)]
+```
+
+## Retrain Model On Entire Data Set and Predict on Test Set
+
+```{r}
+clean_train_df$date = NULL
+final_rf <- ranger(formula = as.formula(price~.), data=clean_train_df[,!c('id')])
+print(final_rf)
+
+final_test_rf<-predict(final_rf, data = clean_test_df, type='response')$predictions
+prediction<-clean_test_df[, .(id=id,final_test_rf)]
+head(prediction)
+```
+
+## CSV Output
+
+```{r}
+colnames(prediction) <- c('id', 'target')
+write.csv(prediction, file = "output.csv")
+```

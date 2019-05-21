@@ -25,13 +25,22 @@ multiple_hist <- function(df, subset){
           strip.text = element_text(face = "bold"))
 }
 
-single_hist <- function(var){
+single_hist <- function(var, var_name){
   qplot(var, geom="histogram") +
     geom_bar(colour = "darkgreen", fill = "gray") +
     ## Theme and looks
     theme_economist() +
-    ggtitle("Histograms") +
+    ggtitle(paste0("Histogram of ", var_name)) +
     theme(strip.background = element_rect(fill = "gray80", colour = "black",
                                           size = 0.5, linetype = "solid"),
           strip.text = element_text(face = "bold"))
+}
+
+
+gg_scatter <- function(df, var){
+  p <- ggplot(data=df, aes_string(x = var, y = 'price')) +
+    geom_point() +
+    theme_economist()
+  
+  return(p)
 }
