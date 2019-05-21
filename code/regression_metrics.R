@@ -10,6 +10,8 @@ rmse<-function(real,predicted){
   return(sqrt(mean((real-predicted)^2)))
 }
 
-custom_rsq<-function(real, predicted){ 
-  return(cor(real, predicted)^2)
+custom_rsq<-function(real, predicted){
+  rss <- sum((predicted - real)^2)
+  tss <- sum((real - mean(real))^2)
+  return(1-rss/tss)
 }
