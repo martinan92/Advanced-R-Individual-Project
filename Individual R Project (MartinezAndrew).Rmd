@@ -9,7 +9,7 @@ This analysis utilizes the data found in a Kaggle competition where competitors 
 
 ```{r, include=FALSE}
 if(!"pacman" %in% installed.packages()) {install.packages("pacman")}
-pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dplyr","leaflet","chron","proj4","ranger", "ggplot2", "ggthemes", "tidyr", "dplyr", "xts", "glmnet", "xgboost", "tuneRanger", "mlr", "Hmisc", "gridExtra")
+pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dplyr","leaflet","chron","proj4","ranger", "ggplot2", "ggthemes", "tidyr", "dplyr", "xts", "glmnet", "xgboost", "tuneRanger", "mlr", "Hmisc", "gridExtra", "breakDown")
 
 source('code/regression_metrics.R')
 source('code/f_partition.R')
@@ -198,7 +198,7 @@ rsq_glment
 ## Ranger Random Forest
 
 ```{r}
-baseline_rf <- ranger(formula = as.formula(price~.), data=split_clean_train_df$train[,!c('id')])
+baseline_rf <- ranger(formula = as.formula(price~.), data=split_clean_train_df$train[,!c('id')], importance = 'impurity')
 print(baseline_rf)
 
 test_rf<-predict(baseline_rf, data = split_clean_train_df$test, type='response')$predictions
@@ -435,7 +435,7 @@ task = makeRegrTask(data = final_train_df$train[,!c('id')], target = "price")
 estimateTimeTuneRanger(task)
 
 # Tuning
-res = tuneRanger(task, num.trees = 1000, num.threads = 2, iters = 70, save.file.path = NULL)
+res = tuneRanger(task, num.trees = 500, num.threads = 2, iters = 70, save.file.path = NULL)
   
 # Mean of best 5 % of the results
 res
@@ -444,10 +444,10 @@ res
 res$model
 
 # Prediction
-final <- predict(res$model, newdata = final_train_df$test[,!c('id')])
+final <- predict(res$model, newdata = final_train_df$test[,!c('id')])$data$response
 df_pipeline_pred<-cbind(df_pipeline_pred, final)
 
-result<-data.table(method=c('baseline','fe1','fe2','fe3','fe4','final'),
+result<-data.table(method=c('baseline','fe1','fe2','fe3','fe4','fe5','final'),
                    rmse=sapply(df_pipeline_pred[,!c('price','id')],
                                function(x) return(rmse(real=df_pipeline_pred$price, predicted=x))),
                    mae=sapply(df_pipeline_pred[,!c('price','id')],
@@ -473,12 +473,42 @@ The following sections retrain the model on the entire training set, uses this r
 
 ```{r}
 clean_train_df$date = NULL
-final_rf <- ranger(formula = as.formula(price~.), data=clean_train_df[,!c('id')])
+final_rf <- ranger(formula = as.formula(price~.), data=fe_train_df1[,!c('id')], importance = 'impurity')
 print(final_rf)
 
-final_test_rf<-predict(final_rf, data = clean_test_df, type='response')$predictions
+final_test_rf<-predict(final_rf, data = fe_test_df1, type='response')$predictions
 prediction<-clean_test_df[, .(id=id,final_test_rf)]
 head(prediction)
+```
+
+## Variable Importance
+
+This chart displays the variable importance sorted by node impurity (i.e. the variation generated when observations reach that variable). Many of the most important factors influencing house pricing are intuitive (i.e. the size/area has a clear positive relationship with price).
+```{r}
+importance_df <- data.frame(final_rf$variable.importance)
+setDT(importance_df, keep.rownames = TRUE)[]
+colnames(importance_df) <- c('variable', 'importance')
+
+ggplot(importance_df, aes(x=reorder(variable,importance), y=importance, fill=importance)) + 
+    geom_bar(stat="identity", position="dodge")+ coord_flip()+
+    ylab("Variable Importance")+
+    xlab("")+
+    ggtitle("Information Value Summary")+
+    guides(fill=F)+
+    scale_fill_gradient(low="red", high="blue")
+```
+
+```{r}
+
+predict.function <- function(model, new_observation) {
+  predict(model, new_observation, type = "response")$predictions
+}
+
+explanation <- broken(final_rf, fe_train_df1[100,-2], data = fe_train_df1[,-2],
+                    predict.function = prediction_function, 
+                    direction = "down")
+
+plot(explanation) + ggtitle("breakDown plot  (direction=down) for ranger model")
 ```
 
 ## CSV Output
