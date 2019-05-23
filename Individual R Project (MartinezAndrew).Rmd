@@ -260,7 +260,7 @@ ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
 
 ## Feature Engineering
 
-A number of features will be created in the hopes their inclusion into the model will improve the overall prediction abilities. The features created include 1) Weekday/Weekend flag, 2) Holiday flag, 3) Renovation flag (defined as when the 2015 area of either the lot or living room is different from the original area), 4) Missing Renovation Year flag (as the presence of a renovation year should correspond to a positive renovation flag), and 5) House Age. It was found that only the inclusion of the first feature actually improved model performance as seen from the below graphs. 
+A number of features will be created in the hopes their inclusion into the model will improve the overall prediction abilities. The features created include 1) Weekday/Weekend flag, 2) Holiday flag, 3) Renovation flag (defined as when the 2015 area of either the lot or living room is different from the original area), 4) Missing Renovation Year flag (as the presence of a renovation year should correspond to a positive renovation flag), and 5) House Age. It was found that the inclusion of the first, third, and fourth features actually improved model performance as seen from the below graphs. 
 
 ### 1. Weekday/Weekend
 
@@ -407,6 +407,44 @@ result[which.min(result$mape)]
 result[which.max(result$rsq)]
 ```
 
+#### Combine Best Features
+
+```{r}
+fe_train_df_final <- fe_train_df1
+fe_test_df_final<- fe_test_df1
+
+fe_train_df_final$renovated <- ifelse(((fe_train_df_final$sqft_living != fe_train_df_final$sqft_living15) | 
+                                     (fe_train_df_final$sqft_lot != fe_train_df_final$sqft_lot15)), T, F)
+fe_test_df_final$rennovated <- ifelse(((fe_test_df_final$sqft_living != fe_test_df_final$sqft_living15) | 
+                                     (fe_test_df_final$sqft_lot != fe_test_df_final$sqft_lot15)), T, F)
+
+fe_train_df_final$missing_ren_year <- ifelse(((fe_train_df_final$yr_renovated == 0) 
+                                              & (fe_train_df_final$renovated == T)), T, F)
+fe_test_df_final$missing_ren_year <- ifelse(((fe_test_df_final$yr_renovated == 0) 
+                                             & (fe_test_df_final$renovated == T)), T, F)
+
+fe_output_final <- split_and_train(fe_train_df_final)
+
+result<-data.table(method=c('baseline','fe1','fe2','fe3','fe4','fe5','fe_final'),
+                   rmse=sapply(fe_output_final[[3]][,!c('price','id')],
+                               function(x) return(rmse(real=fe_output_final[[3]]$price, predicted=x))),
+                   mae=sapply(fe_output_final[[3]][,!c('price','id')],
+                              function(x) return(mae(real=fe_output_final[[3]]$price, predicted=x))),
+                   mape=sapply(fe_output_final[[3]][,!c('price','id')],
+                               function(x) return(mape(real=fe_output_final[[3]]$price, predicted=x))),
+                   rsq=sapply(fe_output_final[[3]][,!c('price','id')],
+                               function(x) return(custom_rsq(real=fe_output_final[[3]]$price, predicted=x))))
+ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
+ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
+
+result[which.min(result$rmse)]
+result[which.min(result$mae)]
+result[which.min(result$mape)]
+result[which.max(result$rsq)]
+
+```
 
 ## Hyperparameter Tuning
 
@@ -422,12 +460,18 @@ result[which.max(result$rsq)]
 ##################################################### TESTING ###################################################### 
 ####################################################################################################################
 ####################################################################################################################
-final_train_df <- fe_output_1[[1]]
-final_test_df <- fe_test_df1
+final_train_df <- fe_output_final[[1]]
+final_test_df <- fe_test_df_final
 
 #Need to convert to integers as task doesn't support categoricals
 final_train_df$train$weekend <- ifelse((final_train_df$train$weekend), 1, 0)
 final_train_df$test$weekend <- ifelse((final_train_df$test$weekend), 1, 0)
+
+final_train_df$train$renovated <- ifelse((final_train_df$train$renovated), 1, 0)
+final_train_df$test$renovated <- ifelse((final_train_df$test$renovated), 1, 0)
+
+final_train_df$train$missing_ren_year <- ifelse((final_train_df$train$missing_ren_year), 1, 0)
+final_train_df$test$missing_ren_year <- ifelse((final_train_df$test$missing_ren_year), 1, 0)
 
 task = makeRegrTask(data = final_train_df$train[,!c('id')], target = "price")
  
@@ -447,7 +491,7 @@ res$model
 final <- predict(res$model, newdata = final_train_df$test[,!c('id')])$data$response
 df_pipeline_pred<-cbind(df_pipeline_pred, final)
 
-result<-data.table(method=c('baseline','fe1','fe2','fe3','fe4','fe5','final'),
+result<-data.table(method=c('baseline','fe1','fe2','fe3','fe4','fe5','fe_final','final'),
                    rmse=sapply(df_pipeline_pred[,!c('price','id')],
                                function(x) return(rmse(real=df_pipeline_pred$price, predicted=x))),
                    mae=sapply(df_pipeline_pred[,!c('price','id')],
@@ -496,19 +540,6 @@ ggplot(importance_df, aes(x=reorder(variable,importance), y=importance, fill=imp
     ggtitle("Information Value Summary")+
     guides(fill=F)+
     scale_fill_gradient(low="red", high="blue")
-```
-
-```{r}
-
-predict.function <- function(model, new_observation) {
-  predict(model, new_observation, type = "response")$predictions
-}
-
-explanation <- broken(final_rf, fe_train_df1[100,-2], data = fe_train_df1[,-2],
-                    predict.function = prediction_function, 
-                    direction = "down")
-
-plot(explanation) + ggtitle("breakDown plot  (direction=down) for ranger model")
 ```
 
 ## CSV Output
