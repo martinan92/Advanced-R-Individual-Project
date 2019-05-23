@@ -415,7 +415,7 @@ fe_test_df_final<- fe_test_df1
 
 fe_train_df_final$renovated <- ifelse(((fe_train_df_final$sqft_living != fe_train_df_final$sqft_living15) | 
                                      (fe_train_df_final$sqft_lot != fe_train_df_final$sqft_lot15)), T, F)
-fe_test_df_final$rennovated <- ifelse(((fe_test_df_final$sqft_living != fe_test_df_final$sqft_living15) | 
+fe_test_df_final$renovated <- ifelse(((fe_test_df_final$sqft_living != fe_test_df_final$sqft_living15) | 
                                      (fe_test_df_final$sqft_lot != fe_test_df_final$sqft_lot15)), T, F)
 
 fe_train_df_final$missing_ren_year <- ifelse(((fe_train_df_final$yr_renovated == 0) 
@@ -464,6 +464,7 @@ final_train_df <- fe_output_final[[1]]
 final_test_df <- fe_test_df_final
 
 #Need to convert to integers as task doesn't support categoricals
+#Train/Test Split
 final_train_df$train$weekend <- ifelse((final_train_df$train$weekend), 1, 0)
 final_train_df$test$weekend <- ifelse((final_train_df$test$weekend), 1, 0)
 
@@ -472,6 +473,11 @@ final_train_df$test$renovated <- ifelse((final_train_df$test$renovated), 1, 0)
 
 final_train_df$train$missing_ren_year <- ifelse((final_train_df$train$missing_ren_year), 1, 0)
 final_train_df$test$missing_ren_year <- ifelse((final_train_df$test$missing_ren_year), 1, 0)
+
+#Validation Split
+final_test_df$weekend <- ifelse((final_test_df$weekend), 1, 0)
+final_test_df$renovated <- ifelse((final_test_df$renovated), 1, 0)
+final_test_df$missing_ren_year <- ifelse((final_test_df$missing_ren_year), 1, 0)
 
 task = makeRegrTask(data = final_train_df$train[,!c('id')], target = "price")
  
@@ -516,11 +522,12 @@ result[which.max(result$rsq)]
 The following sections retrain the model on the entire training set, uses this retrained model to make predictions on the validation set, and finally prepares the predictions for a CSV format.
 
 ```{r}
-clean_train_df$date = NULL
-final_rf <- ranger(formula = as.formula(price~.), data=fe_train_df1[,!c('id')], importance = 'impurity')
+final_total_train<- rbind(final_train_df$train, final_train_df$test)
+
+final_rf <- ranger(formula = as.formula(price~.), data=final_total_train[,!c('id')], importance = 'impurity')
 print(final_rf)
 
-final_test_rf<-predict(final_rf, data = fe_test_df1, type='response')$predictions
+final_test_rf<-predict(final_rf, data = final_test_df, type='response')$predictions
 prediction<-clean_test_df[, .(id=id,final_test_rf)]
 head(prediction)
 ```
