@@ -44,3 +44,24 @@ gg_scatter <- function(df, var){
   
   return(p)
 }
+
+metrics_plot <- function(df, cols, verbose = F){
+  result<-data.table(method=cols,
+                     rmse=sapply(df[,!c('price','id')],function(x) return(rmse(real=df$price, predicted=x))),
+                     mae=sapply(df[,!c('price','id')],function(x) return(mae(real=df$price, predicted=x))),
+                     mape=sapply(df[,!c('price','id')],function(x) return(mape(real=df$price, predicted=x))),
+                     rsq=sapply(df[,!c('price','id')],function(x) return(custom_rsq(real=df$price, predicted=x))))
+  
+  # plotting results metrics
+  print(ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity'))
+  print(ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity'))
+  print(ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity'))
+  print(ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity'))
+  
+  if(verbose){
+    result[which.min(result$rmse)]
+    result[which.min(result$mae)]
+    result[which.min(result$mape)]
+    result[which.max(result$rsq)]
+  }
+}
