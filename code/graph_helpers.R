@@ -5,8 +5,10 @@ univariate_outlier <- function(df, input_var){
 }
 
 bivariate_outlier <- function(df, input_var){
+  layout(matrix(c(1,1,2,3), 2, 2, byrow = TRUE))
   boxplot(df[[input_var]] ~ df$month, main=paste0("Monthly Analysis of ", var))
-  boxplot(df[[input_var]] ~ df$day_of_week, main=paste0("Daily Analysis of ", var))  
+  boxplot(df[[input_var]] ~ df$day_of_week, main=paste0("Day of the Week Analysis of ", var))  
+  boxplot(df[[input_var]] ~ df$day, main=paste0("Day of the Month Analysis of ", var)) 
 }
 
 multiple_hist <- function(df, subset){
@@ -53,15 +55,14 @@ metrics_plot <- function(df, cols, verbose = F){
                      rsq=sapply(df[,!c('price','id')],function(x) return(custom_rsq(real=df$price, predicted=x))))
   
   # plotting results metrics
-  print(ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity'))
-  print(ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity'))
-  print(ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity'))
-  print(ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity'))
+  mape_plot<-ggplot(result, aes(x=method, y=mape))+geom_bar(stat='identity')
+  rmse_plot<-ggplot(result, aes(x=method, y=rmse))+geom_bar(stat='identity')
+  mae_plot<-ggplot(result, aes(x=method, y=mae))+geom_bar(stat='identity')
+  rsq_plot<-ggplot(result, aes(x=method, y=rsq))+geom_bar(stat='identity')
+  
+  grid.arrange(mape_plot, rmse_plot, mae_plot, rsq_plot, ncol=2)
   
   if(verbose){
-    result[which.min(result$rmse)]
-    result[which.min(result$mae)]
     result[which.min(result$mape)]
-    result[which.max(result$rsq)]
   }
 }
