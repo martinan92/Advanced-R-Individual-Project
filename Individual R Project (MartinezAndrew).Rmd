@@ -5,9 +5,10 @@ date: "5/8/2019"
 output: html_document
 ---
 
-This analysis utilizes the data found in a Kaggle competition where competitors seek to predict housing prices in King County, WA, USA (https://bit.ly/2lRv48E). THe dataset provides fields including the number of bedrooms, number of bathrooms, number of floors, square footage of the living room, square footage of the overall lot, among others. The timeframe this dataset covers are the years 2014 through 2015. Therefore, this analysis will utilize a number of machine learning models and techniques in order to achieve the best possible models (in this instance measured using MAPE, MAE, MSE, and R-Squared).
+This analysis utilizes the data found in a Kaggle competition where competitors seek to predict housing prices in King County, WA, USA (https://bit.ly/2lRv48E). The data set provides fields including the number of bedrooms, number of bathrooms, number of floors, square footage of the living room, square footage of the overall lot, among others. The time frame this data set covers are the years 2014 through 2015. Therefore, this analysis will utilize a number of machine learning models and techniques in order to achieve the best possible models (in this instance measured using MAPE, MAE, MSE, and R-Squared with emphasis on the MAPE score).
 
 ```{r, include=FALSE}
+#Check if necessary packages are installed and loaded 
 if(!"pacman" %in% installed.packages()) {install.packages("pacman")}
 pacman::p_load("ggplot2","data.table","lubridate","bit64","rpart","partykit","dplyr","leaflet","chron","proj4","ranger", "ggplot2", "ggthemes", "tidyr", "dplyr", "xts", "glmnet", "xgboost", "tuneRanger", "mlr", "Hmisc", "gridExtra", "breakDown", "caret")
 
@@ -47,7 +48,7 @@ sum(is.na(raw_test_df))
 
 ## Initial Cleaning
 
-As time series modeling will not be utilized in this analysis, the day, month, and year of each purchase will be individually parsed out rather than using the datetime field.
+As time series modeling will not be utilized in this analysis, the day, month, and year of each purchase will be individually parsed out rather than using the date time field.
 
 ```{r}
 clean_train_df <- raw_train_df
@@ -73,7 +74,7 @@ clean_test_df$day_of_week <- as.POSIXlt(as.Date(clean_test_df$date, "%m/%d/%Y"))
 ## Exploratory Analysis
 ### Histograms
 
-In order readable visualizations, a random selection of 1000 houses will be taken for all subsequent graphs/charts.
+In order readable visualizations, a random selection of 1000 houses will be taken for all subsequent graphs/charts. Based on the histogram outputs, it appears that at least some of the variables are not normally distributed.
 
 ```{r}
 set.seed(12345)
@@ -95,6 +96,8 @@ single_hist(df.1000$sqft_basement, "Basement Area")
 ```
 
 ### Scatterplots
+
+The following scatter plots seek to visual describe the relationship between the numerical variables and the target price variable. From this sample, it can be seen that the area of the living room and number of bathrooms in particular have a strong positive relationship (an intuitive observation from a business perspective as they factors are often explicitly taken into account with regards to pricing).
 
 ```{r}
 #Create dataframe with only numerical variables
@@ -131,14 +134,14 @@ map <- leaflet(data.frame(df.1000)) %>%
 # This seems to be no longer supported
   # addLegend(position = 'bottomright', colors = colorsmap, labels = unique(df.1000$bin))
 
-#addLegend(map, position = 'bottomright', colors = colorsmap, labels = unique(df.1000$bin))
+# addLegend(map, position = 'bottomright', colors = colorsmap, labels = unique(df.1000$bin))
 
 map
 ```
 
 ### Outlier Analysis
 #### Univariate Analysis
-The following charts look at the distributions of each numerical value to visually see outliers.
+The following charts look at the distributions of each numerical value to visually see outliers. In this sample there are clear outliers for all variables other than the number of floors and the year the home was built.
 
 ```{r}
 for (var in numerical_var[1:(length(numerical_var)-1)]){
@@ -147,7 +150,7 @@ for (var in numerical_var[1:(length(numerical_var)-1)]){
 ```
 
 #### Bivariate Analysis
-The following charts look at the distributions of each numerical value to visually see outliers on a monthly and daily basis.
+The following charts look at the distributions of each numerical value to visually see outliers on a monthly and daily basis to help understand any temporal patterns. Once again, outliers occur in all variables other than the number of floors and the year built. It is interesting to note that relatively speaking, a greater proportion of outliers are occur on weekdays.
 
 ```{r}
 for (var in numerical_var[1:(length(numerical_var)-1)]){
@@ -158,6 +161,7 @@ for (var in numerical_var[1:(length(numerical_var)-1)]){
 ### Clip Outliers
 
 As the above charts demonstrate that outliers are present, they will be clipped if they lie outside a 95% distribution band.
+
 ```{r}
 clipped_outliers <- lapply(clean_train_df[,..numerical_var], clip, lower_bound = .025, upper_bound = .975)
 clipped_outliers_df <- as.data.table(matrix(unlist(clipped_outliers), nrow=length(unlist(clipped_outliers[1]))))
@@ -283,8 +287,8 @@ fe_train_df1$weekend <-as.logical(is.weekend(clean_train_df$date))
 fe_test_df1$weekend <-as.logical(is.weekend(clean_test_df$date))
 fe_train_df1$date = NULL
 
-fe_output_1 <- split_and_train(fe_train_df1)
-metrics_plot(fe_output_1[[3]], c('baseline','fe1'))
+fe_output_1 <- split_and_train(fe_train_df1, df_pipeline_pred)
+metrics_plot(fe_output_1[[3]], c('baseline','fe1'), verbose = T)
 ```
 
 ### 2. Holiday
@@ -297,8 +301,8 @@ fe_train_df2$holiday <-as.logical(is.holiday(clean_train_df$date))
 fe_test_df2$holiday <-as.logical(is.holiday(clean_test_df$date))
 fe_train_df2$date = NULL
 
-fe_output_2 <- split_and_train(fe_train_df2)
-metrics_plot(fe_output_2[[3]], c('baseline','fe1','fe2'))
+fe_output_2 <- split_and_train(fe_train_df2, fe_output_1[[3]])
+metrics_plot(fe_output_2[[3]], c('baseline','fe1','fe2'), verbose = T)
 
 clean_test_df$date = NULL
 ```
@@ -314,8 +318,8 @@ fe_train_df3$renovated <- ifelse(((fe_train_df3$sqft_living != fe_train_df3$sqft
 fe_test_df3$rennovated <- ifelse(((fe_test_df3$sqft_living != fe_test_df3$sqft_living15) | 
                                      (fe_test_df3$sqft_lot != fe_test_df3$sqft_lot15)), 1, 0)
 
-fe_output_3 <- split_and_train(fe_train_df3)
-metrics_plot(fe_output_3[[3]], c('baseline','fe1','fe2','fe3'))
+fe_output_3 <- split_and_train(fe_train_df3, fe_output_2[[3]])
+metrics_plot(fe_output_3[[3]], c('baseline','fe1','fe2','fe3'), verbose = T)
 ```
 
 ### 4. Missing Renovation Year
@@ -327,8 +331,8 @@ fe_test_df4 <- fe_test_df3
 fe_train_df4$missing_ren_year <- ifelse(((fe_train_df4$yr_renovated == 0) & (fe_train_df4$renovated == T)), 1, 0)
 fe_test_df4$missing_ren_year <- ifelse(((fe_test_df4$yr_renovated == 0) & (fe_test_df4$renovated == T)), 1, 0)
 
-fe_output_4 <- split_and_train(fe_train_df4)
-metrics_plot(fe_output_4[[3]], c('baseline','fe1','fe2','fe3','fe4'))
+fe_output_4 <- split_and_train(fe_train_df4, fe_output_3[[3]])
+metrics_plot(fe_output_4[[3]], c('baseline','fe1','fe2','fe3','fe4'), verbose = T)
 ```
 
 ### 5. House Age
@@ -340,11 +344,13 @@ fe_test_df5 <- clean_test_df
 fe_train_df5$house_age <- year(Sys.Date()) - fe_train_df5$yr_built
 fe_test_df5$house_age <- year(Sys.Date()) - fe_test_df5$yr_built
 
-fe_output_5 <- split_and_train(fe_train_df5)
+fe_output_5 <- split_and_train(fe_train_df5, fe_output_4[[3]])
 metrics_plot(fe_output_5[[3]], c('baseline','fe1','fe2','fe3','fe4','fe5'), verbose = T)
 ```
 
 #### Combine Best Features
+
+A combination of the first, third, and fourth engineered features are combined to train on the next model iteration. This combined model is found to be superior to any of the other models separately and therefore these features will be included in the tuning phase. 
 
 ```{r}
 fe_train_df_final <- fe_train_df1
@@ -360,11 +366,13 @@ fe_train_df_final$missing_ren_year <- ifelse(((fe_train_df_final$yr_renovated ==
 fe_test_df_final$missing_ren_year <- ifelse(((fe_test_df_final$yr_renovated == 0) 
                                              & (fe_test_df_final$renovated == T)), 1, 0)
 
-fe_output_final <- split_and_train(fe_train_df_final)
-metrics_plot(fe_output_final[[3]], c('baseline','fe1','fe2','fe3','fe4','fe5','fe_final'), verbose = T)
+fe_output_final <- split_and_train(fe_train_df_final, fe_output_5[[3]])
+metrics_plot(fe_output_final[[3]], c('baseline','fe1','fe2','fe3','fe4','fe5','final_fe'), verbose = T)
 ```
 
 ## Hyperparameter Tuning
+
+Per the documentation, the TuneRanger package seeks to find the optimal minimum node size, sample fraction, and mtry for a given Ranger model. Rather than using the standard cross-validation folds, out-of-bag (OOB) predictions are used for faster performance time. This final tuned model further improves the performance from previous iterations with a MAPE on the holdout of approximately **bold** 0.1152482 __bold__ .
 
 ```{r}
 # test_rf_tuned <- csrf(
@@ -397,33 +405,34 @@ estimateTimeTuneRanger(task)
 # Tuning
 res = tuneRanger(task, num.trees = 500, num.threads = 2, iters = 50, save.file.path = NULL)
   
-# Mean of best 5 % of the results
-res
-
 # Model with the new tuned hyperparameters
 res$model
 
 # Prediction
 final <- predict(res$model, newdata = final_train_df$test[,!c('id')])$data$response
-df_pipeline_pred<-cbind(df_pipeline_pred, final)
+df_pipeline_final<-cbind(fe_output_final[[3]], final)
 
-metrics_plot(df_pipeline_pred, c('baseline','fe1','fe2','fe3','fe4','fe5','fe_final','final'), verbose = T)
+metrics_plot(df_pipeline_final, c('baseline','fe1','fe2','fe3','fe4','fe5','final_fe','final_model'), verbose = T)
 ```
 
 ## Retrain Model On Entire Data Set and Predict on Test Set
 
-The following sections retrain the model on the entire training set, uses this retrained model to make predictions on the validation set, and finally prepares the predictions for a CSV format.
+The following sections retrain the model using the feature engineering and optimal hyperparamters from previous sections on the entire training set. This retrained model is then used to make predictions on the validation set, which is finally prepared for the final CSV format.
 
 ```{r}
 final_total_train<- rbind(final_train_df$train, final_train_df$test)
 
-#Takes too long, adds no value
-# fit_control <- trainControl(method = "cv", number = 3, search = "random")
+#Running this was computationally expensive and ultimately unsuccessful
+# fit_control <- trainControl(method = "cv", number = 3, verboseIter = TRUE, search = "random")
 # final_rf <- train(as.factor(price) ~ ., data = final_total_train[,!c('id')],
 #                  method = "ranger",
 #                  trControl = fit_control)
 
-final_rf <- ranger(formula = as.formula(price~.), data=final_total_train[,!c('id')], importance = 'impurity')
+final_rf <- ranger(formula = as.formula(price~.), data=final_total_train[,!c('id')], 
+                   importance = 'impurity',
+                   mtry = res$recommended.pars$mtry, 
+                   min.node.size = res$recommended.pars$min.node.size,
+                   sample.fraction = res$recommended.pars$sample.fraction)
 print(final_rf)
 
 final_test_rf<-predict(final_rf, data = final_test_df, type='response')$predictions
@@ -434,6 +443,7 @@ head(prediction)
 ## Variable Importance
 
 This chart displays the variable importance sorted by node impurity (i.e. the variation generated when observations reach that variable). Many of the most important factors influencing house pricing are intuitive (i.e. the size/area has a clear positive relationship with price).
+
 ```{r}
 importance_df <- data.frame(final_rf$variable.importance)
 setDT(importance_df, keep.rownames = TRUE)[]
