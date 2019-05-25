@@ -372,7 +372,7 @@ metrics_plot(fe_output_final[[3]], c('baseline','fe1','fe2','fe3','fe4','fe5','f
 
 ## Hyperparameter Tuning
 
-Per the documentation, the TuneRanger package seeks to find the optimal minimum node size, sample fraction, and mtry for a given Ranger model. Rather than using the standard cross-validation folds, out-of-bag (OOB) predictions are used for faster performance time. This final tuned model further improves the performance from previous iterations with a MAPE on the holdout of approximately **bold** 0.1152482 __bold__ .
+Per the documentation, the TuneRanger package seeks to find the optimal minimum node size, sample fraction, and mtry for a given Ranger model. Rather than using the standard cross-validation folds, out-of-bag (OOB) predictions are used for faster performance time. This final tuned model further improves the performance from previous iterations with a MAPE on the holdout of approximately **0.1152482**.
 
 ```{r}
 # test_rf_tuned <- csrf(
